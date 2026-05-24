@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "mobile",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "mobile",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single"
+    },
+    "experiments": {
+      "reactCompiler": true
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}

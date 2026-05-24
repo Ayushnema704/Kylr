@@ -1,0 +1,24 @@
+{
+  "name": "KYLR Intelligent Finance Layer",
+  "short_name": "KYLR",
+  "description": "Your AI Finance Layer. Control money intelligently.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=KylrBrandLogo&backgroundColor=8b5cf6",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=KylrBrandLogo&backgroundColor=8b5cf6",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
