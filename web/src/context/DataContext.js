@@ -184,7 +184,10 @@ export function DataProvider({ children }) {
   // Fetch all user records
   const refreshData = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    // Only trigger full screen loading block on initial blank mount to prevent background-sync lag/flashing
+    if (transactions.length === 0 && accounts.length === 0) {
+      setLoading(true);
+    }
 
     if (isSandbox) {
       // Fetch sandbox records from LocalStorage
@@ -268,6 +271,36 @@ export function DataProvider({ children }) {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  // Background polling sync (Google Workspace style auto-sync)
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      // Only sync if the tab is active/visible to save resources/API quota
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refreshData();
+      }
+    }, 8000); // sync every 8 seconds
+
+    return () => clearInterval(interval);
+  }, [user, refreshData]);
+
+  // Sync immediately when tab visibility changes to visible
+  useEffect(() => {
+    if (!user) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [user, refreshData]);
 
   // ==========================================
   // CURRENCY CONVERSION AND FORMATTING UTILITIES
@@ -570,7 +603,8 @@ export function DataProvider({ children }) {
         CreditLimit: parseFloat(data.creditLimit) || 0,
         BankName: data.bankName || "",
         CardLast4Digits: data.cardLast4Digits || "0000",
-        CreatedAt: new Date().toISOString()
+        CreatedAt: new Date().toISOString(),
+        Color: data.color || "#1E1B4B"
       };
       const updated = [...accounts, newAcc];
       setAccounts(updated);
@@ -587,7 +621,8 @@ export function DataProvider({ children }) {
           currentBalance: data.currentBalance,
           creditLimit: data.creditLimit,
           bankName: data.bankName,
-          cardLast4Digits: data.cardLast4Digits
+          cardLast4Digits: data.cardLast4Digits,
+          color: data.color || "#1E1B4B"
         };
         const res = await fetch(appsScriptUrl, {
           method: "POST",

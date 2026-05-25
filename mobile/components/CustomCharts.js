@@ -1,9 +1,13 @@
 import React from "react";
 import { View, Text, StyleSheet, Dimensions } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 const { width } = Dimensions.get("window");
 
-// Custom category distribution horizontal bar chart
+// Curated modern fintech palette matching categories
+const COLOR_PALETTE = ["#8B5CF6", "#06B6D4", "#10B981", "#F43F5E", "#F59E0B", "#EC4899", "#3B82F6", "#6B7280"];
+
+// Custom category distribution visual share builder (Matches Donut style from Web)
 export function CategoryDistributionChart({ data, formatCurrency, theme }) {
   if (!data || data.length === 0) {
     return (
@@ -15,50 +19,57 @@ export function CategoryDistributionChart({ data, formatCurrency, theme }) {
     );
   }
 
-  const total = data.reduce((acc, c) => acc + c.value, 0) || 1;
-
-  // Custom colors matching categories
-  const colorPalette = ["#8B5CF6", "#10B981", "#06B6D4", "#F59E0B", "#EC4899", "#3B82F6", "#F43F5E", "#14B8A6"];
+  const total = data.reduce((acc, c) => acc + c.value, 0) || 0;
 
   return (
     <View style={styles.container}>
-      {data.map((item, idx) => {
-        const percentage = ((item.value / total) * 100).toFixed(0);
-        const color = colorPalette[idx % colorPalette.length];
-        
-        return (
-          <View key={item.name} style={styles.row}>
-            <View style={styles.rowHeader}>
-              <Text style={[styles.catName, { color: theme.textPrimary }]}>
-                {item.name} ({percentage}%)
-              </Text>
-              <Text style={[styles.catValue, { color: theme.textPrimary }]}>
-                {formatCurrency(item.value)}
-              </Text>
+      {/* 1. Center Donut Stat Badge */}
+      <View style={styles.donutWrapper}>
+        <View style={[styles.donutCenter, { borderColor: theme.cardBorder, backgroundColor: theme.background }]}>
+          <Feather name="pie-chart" size={16} color={theme.accentPurple} style={{ marginBottom: 4 }} />
+          <Text style={[styles.donutSubText, { color: theme.textSecondary }]}>TOTAL SPENT</Text>
+          <Text style={[styles.donutValText, { color: theme.textPrimary }]}>{formatCurrency(total)}</Text>
+        </View>
+      </View>
+
+      {/* 2. Web-style Legend with Color Badges */}
+      <Text style={[styles.legendTitle, { color: theme.textSecondary }]}>Ledger Distributions</Text>
+      <View style={styles.legendGrid}>
+        {data.map((item, idx) => {
+          const percentage = ((item.value / (total || 1)) * 100).toFixed(0);
+          const color = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+          
+          return (
+            <View 
+              key={item.name} 
+              style={[
+                styles.legendCard, 
+                { 
+                  backgroundColor: theme.cardBg, 
+                  borderColor: theme.cardBorder,
+                  borderLeftColor: color,
+                  borderLeftWidth: 4
+                }
+              ]}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                <View>
+                  <Text style={[styles.legendLabel, { color: theme.textPrimary }]}>{item.name}</Text>
+                  <Text style={[styles.legendPercent, { color: theme.textSecondary }]}>{percentage}% share</Text>
+                </View>
+                <Text style={[styles.legendValue, { color: theme.textPrimary }]}>
+                  {formatCurrency(item.value)}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.barOuter, { backgroundColor: theme.cardBorder }]}>
-              <View 
-                style={[
-                  styles.barInner, 
-                  { 
-                    width: `${Math.max(parseFloat(percentage), 3)}%`, 
-                    backgroundColor: color,
-                    shadowColor: color,
-                    shadowOpacity: 0.5,
-                    shadowRadius: 4,
-                    shadowOffset: { width: 0, height: 1 }
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-        );
-      })}
+          );
+        })}
+      </View>
     </View>
   );
 }
 
-// Custom Daily Spending Vertical Bar Chart
+// Custom Daily Spending Area-Glow Trend Chart
 export function DailyTrendBarChart({ data, formatCurrency, theme }) {
   if (!data || data.length === 0) {
     return (
@@ -81,22 +92,27 @@ export function DailyTrendBarChart({ data, formatCurrency, theme }) {
             
             return (
               <View key={item.date} style={styles.barColumn}>
+                {/* Visual Tooltip Badge */}
                 <View style={styles.barValWrapper}>
-                  <Text style={[styles.barTooltip, { color: theme.textPrimary, fontSize: 8 }]}>
+                  <Text style={[styles.barTooltip, { color: theme.textPrimary }]}>
                     {item.amount > 0 ? formatCurrency(item.amount).split('.')[0] : ""}
                   </Text>
                 </View>
                 
+                {/* Glowing Trend Bar resembling Web Recharts Area glow */}
                 <View style={[styles.verticalBarOuter, { backgroundColor: theme.cardBorder }]}>
                   <View 
                     style={[
                       styles.verticalBarInner, 
                       { 
                         height: `${Math.max(parseFloat(barHeightPercent), 4)}%`, 
-                        backgroundColor: "var(--neon-purple)" === "var(--neon-purple)" ? "#8B5CF6" : "#A78BFA",
-                        shadowColor: "#8B5CF6",
-                        shadowOpacity: 0.4,
-                        shadowRadius: 5
+                        backgroundColor: `${theme.accentPurple}2F`, // Translucent gradient background
+                        borderTopColor: theme.accentPurple, // Glowing top border
+                        borderTopWidth: 2,
+                        shadowColor: theme.accentPurple,
+                        shadowOpacity: 0.5,
+                        shadowRadius: 6,
+                        elevation: 4
                       }
                     ]} 
                   />
@@ -112,7 +128,7 @@ export function DailyTrendBarChart({ data, formatCurrency, theme }) {
       </View>
       <View style={styles.axisLabelRow}>
         <Text style={[styles.axisLabel, { color: theme.textSecondary }]}>
-          Showing daily transactions (Last 10 active days)
+          Daily expenditures (Last 10 active days)
         </Text>
       </View>
     </View>
@@ -133,30 +149,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  row: {
-    marginBottom: 14,
+  donutWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 18,
   },
-  rowHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
+  donutCenter: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  catName: {
-    fontSize: 12,
-    fontWeight: "600",
+  donutSubText: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  catValue: {
-    fontSize: 12,
+  donutValText: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  legendTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    marginTop: 6,
+  },
+  legendGrid: {
+    gap: 8,
+  },
+  legendCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  legendLabel: {
+    fontSize: 11,
     fontWeight: "700",
   },
-  barOuter: {
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
+  legendPercent: {
+    fontSize: 9,
+    fontWeight: "600",
+    marginTop: 2,
   },
-  barInner: {
-    height: "100%",
-    borderRadius: 4,
+  legendValue: {
+    fontSize: 12,
+    fontWeight: "800",
   },
   chartWrapper: {
     height: 150,
@@ -185,18 +234,19 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   barTooltip: {
-    fontWeight: "600",
+    fontSize: 8,
+    fontWeight: "700",
   },
   verticalBarOuter: {
-    width: 12,
+    width: 14,
     height: "70%",
-    borderRadius: 6,
+    borderRadius: 7,
     overflow: "hidden",
     justifyContent: "flex-end",
   },
   verticalBarInner: {
     width: "100%",
-    borderRadius: 6,
+    borderRadius: 7,
   },
   barLabel: {
     fontSize: 9,
@@ -205,10 +255,12 @@ const styles = StyleSheet.create({
   },
   axisLabelRow: {
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
   axisLabel: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   }
 });

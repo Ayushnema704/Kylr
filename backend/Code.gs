@@ -123,7 +123,7 @@ function initSpreadsheet() {
     "Users": ["UID", "Name", "Email", "Salary", "BudgetRuleEnabled", "NeedsPercentage", "WantsPercentage", "SavingsPercentage", "CreatedAt"],
     "Transactions": ["TransactionID", "UID", "Date", "Amount", "TransactionType", "Category", "Account", "Note", "BudgetType", "CreatedAt"],
     "Categories": ["CategoryID", "UID", "CategoryName", "Icon", "Color", "BudgetType", "CreatedAt"],
-    "Accounts": ["AccountID", "UID", "AccountType", "AccountName", "CurrentBalance", "CreditLimit", "BankName", "CardLast4Digits", "CreatedAt"]
+    "Accounts": ["AccountID", "UID", "AccountType", "AccountName", "CurrentBalance", "CreditLimit", "BankName", "CardLast4Digits", "CreatedAt", "Color"]
   };
   
   for (let sheetName in sheets) {
@@ -136,6 +136,16 @@ function initSpreadsheet() {
         .setFontWeight("bold")
         .setBackground("#1a1a2e")
         .setFontColor("#ffffff");
+    } else if (sheetName === "Accounts") {
+      // Auto-migrate: check if "Color" column exists
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (headers.indexOf("Color") === -1) {
+        const nextCol = headers.length + 1;
+        sheet.getRange(1, nextCol).setValue("Color")
+          .setFontWeight("bold")
+          .setBackground("#1a1a2e")
+          .setFontColor("#ffffff");
+      }
     }
   }
 }
@@ -248,8 +258,50 @@ function updateBudget(uid, data) {
 // 2. TRANSACTION MANAGEMENT MODULE
 // ==========================================
 
+/**
+ * Dynamic Multi-Sheet Transaction Aggregator with Multi-tenant isolation.
+ * Scans all sheets in the workbook and aggregates transactions from any sheets
+ * starting with "Transactions" (e.g. legacy "Transactions" sheet and monthly "Transactions_2026-05").
+ */
+function getAllTransactionRows(uidFilter) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = ss.getSheets();
+  const combined = [];
+  
+  for (let i = 0; i < sheets.length; i++) {
+    const sheetName = sheets[i].getName();
+    if (sheetName === "Transactions" || sheetName.indexOf("Transactions_") === 0) {
+      const rows = getSheetRows(sheetName, uidFilter);
+      for (let j = 0; j < rows.length; j++) {
+        const row = rows[j];
+        row.sheetName = sheetName; // Keep track of physical sheet name for editing/deletion
+        combined.push(row);
+      }
+    }
+  }
+  return combined;
+}
+
+/**
+ * Fetch or dynamically initialize a monthly transactions table partition
+ */
+function getOrCreateMonthlySheet(ss, sheetName) {
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    const headers = ["TransactionID", "UID", "Date", "Amount", "TransactionType", "Category", "Account", "Note", "BudgetType", "CreatedAt"];
+    sheet.appendRow(headers);
+    // Format headers
+    sheet.getRange(1, 1, 1, headers.length)
+      .setFontWeight("bold")
+      .setBackground("#1a1a2e")
+      .setFontColor("#ffffff");
+  }
+  return sheet;
+}
+
 function getTransactions(uid) {
-  const list = getSheetRows("Transactions", uid);
+  const list = getAllTransactionRows(uid);
   // Sort descending by Date
   list.sort((a, b) => new Date(b.Date) - new Date(a.Date));
   return { success: true, transactions: list };
@@ -257,7 +309,6 @@ function getTransactions(uid) {
 
 function addTransaction(uid, data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Transactions");
   
   const id = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
   const date = data.date || new Date().toISOString().split('T')[0];
@@ -267,6 +318,19 @@ function addTransaction(uid, data) {
   const account = data.account || "Cash";
   const note = data.note || "";
   const budgetType = data.budgetType || "Want"; // Need / Want / Savings
+
+  // Parse YYYY-MM from transaction date to create a new monthly sheet if not exists
+  let sheetName = "Transactions";
+  try {
+    const parts = date.split('-');
+    if (parts.length >= 2) {
+      sheetName = "Transactions_" + parts[0] + "-" + parts[1]; // Transactions_2026-05
+    }
+  } catch (err) {
+    // fallback to legacy
+  }
+
+  const sheet = getOrCreateMonthlySheet(ss, sheetName);
   
   // Append transaction
   sheet.appendRow([
@@ -285,17 +349,21 @@ function addTransaction(uid, data) {
   // Dynamically update the account balance
   adjustAccountBalance(uid, account, amount, type);
   
-  return { success: true, transactionId: id, message: "Transaction added successfully" };
+  return { success: true, transactionId: id, message: "Transaction added successfully to " + sheetName };
 }
 
 function deleteTransaction(uid, txnId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName("Transactions");
-  const txns = getSheetRows("Transactions", uid);
+  const txns = getAllTransactionRows(uid);
   
   const target = txns.find(t => String(t.TransactionID) === String(txnId));
   if (!target) {
     return { success: false, error: "Transaction not found or unauthorized" };
+  }
+  
+  const sheet = ss.getSheetByName(target.sheetName);
+  if (!sheet) {
+    return { success: false, error: "Sheet " + target.sheetName + " not found" };
   }
   
   // Revert balance before deleting
@@ -397,9 +465,9 @@ function getAccounts(uid) {
   // Seed default if empty
   if (accounts.length === 0) {
     const defaults = [
-      { type: "Bank Account", name: "HDFC Savings", balance: 2500, limit: 0, bank: "HDFC Bank", last4: "4920" },
-      { type: "Credit Card", name: "ICICI Amazon Pay", balance: -150, limit: 5000, bank: "ICICI Bank", last4: "8821" },
-      { type: "Wallet", name: "Paytm Wallet", balance: 120, limit: 0, bank: "Paytm", last4: "0000" }
+      { type: "Bank Account", name: "HDFC Savings", balance: 2500, limit: 0, bank: "HDFC Bank", last4: "4920", color: "#1E1B4B" },
+      { type: "Credit Card", name: "ICICI Amazon Pay", balance: -150, limit: 5000, bank: "ICICI Bank", last4: "8821", color: "#111827" },
+      { type: "Wallet", name: "Paytm Wallet", balance: 120, limit: 0, bank: "Paytm", last4: "0000", color: "#064E3B" }
     ];
     
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -408,7 +476,7 @@ function getAccounts(uid) {
     
     defaults.forEach(a => {
       const id = "ACC_" + Math.random().toString(36).substr(2, 9).toUpperCase();
-      const row = [id, uid, a.type, a.name, a.balance, a.limit, a.bank, a.last4, new Date().toISOString()];
+      const row = [id, uid, a.type, a.name, a.balance, a.limit, a.bank, a.last4, new Date().toISOString(), a.color];
       sheet.appendRow(row);
       created.push({
         AccountID: id,
@@ -419,7 +487,8 @@ function getAccounts(uid) {
         CreditLimit: a.limit,
         BankName: a.bank,
         CardLast4Digits: a.last4,
-        CreatedAt: row[8]
+        CreatedAt: row[8],
+        Color: a.color
       });
     });
     return { success: true, accounts: created };
@@ -439,6 +508,7 @@ function addAccount(uid, data) {
   const limit = parseFloat(data.creditLimit) || 0.0;
   const bank = data.bankName || "";
   const last4 = data.cardLast4Digits || "";
+  const color = data.color || "#1E1B4B";
   
   sheet.appendRow([
     id,
@@ -449,7 +519,8 @@ function addAccount(uid, data) {
     limit,
     bank,
     last4,
-    new Date().toISOString()
+    new Date().toISOString(),
+    color
   ]);
   
   return { success: true, accountId: id, message: "Financial Account created successfully" };
@@ -491,7 +562,7 @@ function adjustAccountBalance(uid, accountName, amount, txnType) {
 
 function getAnalytics(uid) {
   const profileData = getUserProfile(uid).profile;
-  const transactions = getSheetRows("Transactions", uid);
+  const transactions = getAllTransactionRows(uid);
   const accounts = getSheetRows("Accounts", uid);
   
   let totalIncome = 0;

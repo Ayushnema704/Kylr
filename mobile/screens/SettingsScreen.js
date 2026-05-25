@@ -34,13 +34,28 @@ export default function SettingsScreen({ theme, activeThemeName, toggleTheme }) 
   const [needs, setNeeds] = useState(user?.needsPercentage?.toString() || "50");
   const [wants, setWants] = useState(user?.wantsPercentage?.toString() || "30");
   const [savings, setSavings] = useState(user?.savingsPercentage?.toString() || "20");
-
   // Integration forms
   const [scriptUrl, setScriptUrl] = useState(appsScriptUrl);
-  const [apiKey, setApiKey] = useState(geminiApiKey);
-
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+
+  // Sync state if keys change in background
+  React.useEffect(() => {
+    setScriptUrl(appsScriptUrl);
+  }, [appsScriptUrl]);  // Sync with user profile on mount
+  React.useEffect(() => {
+    if (user) {
+      setDisplayName(user.displayName || "");
+      setSalary(user.salary?.toString() || "5000");
+      setActiveCurrency(user.currency || "USD");
+      setNeeds(user.needsPercentage?.toString() || "50");
+      setWants(user.wantsPercentage?.toString() || "30");
+      setSavings(user.savingsPercentage?.toString() || "20");
+    }
+  }, [user]);
+
+  const totalPercentage = (parseInt(needs) || 0) + (parseInt(wants) || 0) + (parseInt(savings) || 0);
+  const isRatioValid = totalPercentage === 100;
 
   // Save profile changes
   const handleSaveProfile = async () => {
@@ -99,16 +114,31 @@ export default function SettingsScreen({ theme, activeThemeName, toggleTheme }) 
       }
     }
 
-    await setUser(updatedUser);
-    await refreshData();
+    const { updateBudget } = useData();
+    const res = await updateBudget({
+      name: displayName,
+      salary: parseFloat(salary) || 5000,
+      budgetRuleEnabled: true,
+      needsPercentage: n,
+      wantsPercentage: w,
+      savingsPercentage: s,
+      currency: activeCurrency
+    });
+
+    if (res.success) {
+      await setUser(updatedUser);
+      await refreshData();
+      Alert.alert("Success", "User profile and budget allocations successfully updated!");
+    } else {
+      Alert.alert("Sync Error", "Could not save profile change to Sheets backend.");
+    }
     setSavingProfile(false);
-    Alert.alert("Success", "User profile and budget allocations successfully updated!");
   };
 
   // Save backend credentials
   const handleSaveConfig = async () => {
     setSavingConfig(true);
-    await updateBackendConfig(scriptUrl, apiKey);
+    await updateBackendConfig(scriptUrl, "");
     await refreshData();
     setSavingConfig(false);
     Alert.alert("Success", "Integration credentials synchronized!");
@@ -215,7 +245,36 @@ export default function SettingsScreen({ theme, activeThemeName, toggleTheme }) 
           </View>
         </View>
 
-        <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.accentPurple }]} onPress={handleSaveProfile}>
+        {/* Validator status bar */}
+        <View 
+          style={[
+            styles.validatorBanner, 
+            { 
+              backgroundColor: isRatioValid ? "rgba(16, 185, 129, 0.1)" : "rgba(244, 63, 94, 0.1)",
+              borderColor: isRatioValid ? theme.accentEmerald : theme.accentRose,
+              borderWidth: 1
+            }
+          ]}
+        >
+          <Text style={[styles.validatorText, { color: isRatioValid ? theme.accentEmerald : theme.accentRose }]}>
+            {isRatioValid 
+              ? "✅ Perfect! Allocator ratio equals exactly 100%." 
+              : `⚠️ Ratios must sum up to exactly 100%! (Sum: ${totalPercentage}%)`
+            }
+          </Text>
+        </View>
+
+        <TouchableOpacity 
+          style={[
+            styles.saveButton, 
+            { 
+              backgroundColor: theme.accentPurple,
+              opacity: isRatioValid ? 1 : 0.5
+            }
+          ]} 
+          onPress={handleSaveProfile}
+          disabled={!isRatioValid}
+        >
           {savingProfile ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
@@ -290,17 +349,6 @@ export default function SettingsScreen({ theme, activeThemeName, toggleTheme }) 
               />
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Gemini AI API Key</Text>
-              <TextInput 
-                style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary }]} 
-                placeholder="AIzaSy..." 
-                placeholderTextColor={theme.textSecondary}
-                secureTextEntry={true}
-                value={apiKey}
-                onChangeText={setApiKey}
-              />
-            </View>
 
             <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.accentPurple }]} onPress={handleSaveConfig}>
               {savingConfig ? (
@@ -411,6 +459,18 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
+  },
+  validatorBanner: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    marginBottom: 6,
+    alignItems: "center"
+  },
+  validatorText: {
+    fontSize: 10,
+    fontWeight: "700"
   },
   rateRow: {
     flexDirection: "row",

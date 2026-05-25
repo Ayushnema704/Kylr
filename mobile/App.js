@@ -127,11 +127,11 @@ function AppContent() {
       {/* FLOATING CUSTOM BOTTOM TAB BAR */}
       <View style={[styles.floatingTabBar, { backgroundColor: themeName === 'dark' ? 'rgba(10, 10, 15, 0.92)' : 'rgba(253, 251, 247, 0.95)', borderColor: theme.cardBorder }]}>
         {[
-          { id: 'dashboard', label: 'Home', icon: 'home' },
-          { id: 'accounts', label: 'Vault', icon: 'credit-card' },
-          { id: 'analytics', label: 'Charts', icon: 'pie-chart' },
-          { id: 'categories', label: 'Rules', icon: 'list' },
-          { id: 'settings', label: 'Config', icon: 'settings' }
+          { id: 'dashboard', label: 'Dashboard', icon: 'home' },
+          { id: 'analytics', label: 'Analytics', icon: 'trending-up' },
+          { id: 'accounts', label: 'Accounts', icon: 'credit-card' },
+          { id: 'categories', label: 'Categories', icon: 'grid' },
+          { id: 'settings', label: 'Settings', icon: 'settings' }
         ].map(tab => {
           const isActive = activeTab === tab.id;
           return (

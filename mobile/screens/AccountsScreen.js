@@ -1,12 +1,46 @@
-import React, { useMemo } from "react";
-import { StyleSheet, Text, View, ScrollView } from "react-native";
+import React, { useMemo, useState } from "react";
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  ScrollView, 
+  Modal, 
+  TouchableOpacity, 
+  TextInput, 
+  Alert, 
+  KeyboardAvoidingView, 
+  Platform 
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useData } from "../contexts/DataContext";
 
 export default function AccountsScreen({ theme }) {
-  const { accounts, formatCurrency } = useData();
+  const { accounts, addAccount, deleteAccount, formatCurrency } = useData();
 
-  // Memoize vault balance aggregations to prevent unnecessary recalculations on re-renders
+  // Modal and Form states
+  const [modalVisible, setModalVisible] = useState(false);
+  const [accountType, setAccountType] = useState("Bank Account");
+  const [accountName, setAccountName] = useState("");
+  const [currentBalance, setCurrentBalance] = useState("");
+  const [creditLimit, setCreditLimit] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [cardLast4Digits, setCardLast4Digits] = useState("");
+  
+  // High-End Fintech color palette swatches
+  const CARD_PALETTE = [
+    "#F43F5E", // Rose
+    "#10B981", // Emerald
+    "#F59E0B", // Amber
+    "#EC4899", // Pink
+    "#8B5CF6", // Purple
+    "#3B82F6", // Blue
+    "#06B6D4", // Cyan
+    "#6B7280"  // Gray
+  ];
+  const [selectedColor, setSelectedColor] = useState(CARD_PALETTE[0]);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Memoize vault balance aggregations to optimize rendering
   const { totalAssets, totalLiabilities, netWealth } = useMemo(() => {
     const assets = accounts
       .filter(a => a.AccountType !== "Credit Card")
@@ -23,8 +57,78 @@ export default function AccountsScreen({ theme }) {
     };
   }, [accounts]);
 
-  // Custom bank card themes matching web
-  const getCardTheme = (name) => {
+  // Handle addition of new account source
+  const handleAddAccountSubmit = async () => {
+    if (!accountName.trim()) {
+      Alert.alert("Input Error", "Please provide a display name for the account.");
+      return;
+    }
+    if (!currentBalance || isNaN(parseFloat(currentBalance))) {
+      Alert.alert("Input Error", "Please provide a valid numeric balance.");
+      return;
+    }
+
+    setSubmitting(true);
+    const res = await addAccount({
+      accountType,
+      accountName: accountName.trim(),
+      currentBalance: parseFloat(currentBalance) || 0,
+      creditLimit: parseFloat(creditLimit) || 0,
+      bankName: bankName.trim() || "Generic",
+      cardLast4Digits: cardLast4Digits || "0000",
+      color: selectedColor
+    });
+    setSubmitting(false);
+
+    if (res.success) {
+      setAccountName("");
+      setBankName("");
+      setCurrentBalance("");
+      setCreditLimit("");
+      setCardLast4Digits("");
+      setSelectedColor(CARD_PALETTE[0]);
+      setModalVisible(false);
+      Alert.alert("Success", "Financial account added and synchronized!");
+    } else {
+      Alert.alert("Sync Error", "Could not synchronize new account. Verify your settings.");
+    }
+  };
+
+  // Handle removal of financial source
+  const handleDeleteAccount = (accId) => {
+    Alert.alert(
+      "Confirm Action",
+      "Are you sure you want to remove this financial source? All balance metrics will re-aggregate.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Remove Asset", 
+          style: "destructive",
+          onPress: async () => {
+            const res = await deleteAccount(accId);
+            if (!res.success) {
+              Alert.alert("Sync Error", "Could not remove card from Sheets.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Custom bank card themes matching web card custom colors
+  const getCardTheme = (acc) => {
+    const customColor = acc.Color || acc.color;
+    if (customColor) {
+      return {
+        bg: customColor,
+        brand: acc.AccountType === "Credit Card" ? "KYLR POSTPAID" : "KYLR LIQUID",
+        chip: "#FFFFFF",
+        textColor: "#FFFFFF",
+        subColor: "rgba(255, 255, 255, 0.75)"
+      };
+    }
+
+    const name = acc.AccountName || "";
     const n = name.toLowerCase();
     if (n.includes("hdfc")) {
       return {
@@ -65,8 +169,19 @@ export default function AccountsScreen({ theme }) {
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.textPrimary }]}>Vault Asset Sources</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Debit cards, credit limits, and wallets</Text>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Vault Asset Sources</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Debit cards, credit limits, and wallets</Text>
+          </View>
+          <TouchableOpacity 
+            onPress={() => setModalVisible(true)} 
+            style={[styles.addVaultBtn, { backgroundColor: theme.accentPurple }]}
+          >
+            <Feather name="plus" size={14} color="#FFFFFF" />
+            <Text style={styles.addVaultBtnText}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* BALANCE SCORECARD */}
@@ -89,14 +204,22 @@ export default function AccountsScreen({ theme }) {
       {/* CARDS LIST SECTION */}
       <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Physical & Virtual Cards</Text>
       {accounts.map(acc => {
-        const cardTheme = getCardTheme(acc.AccountName);
+        const cardTheme = getCardTheme(acc);
         const limitVal = parseFloat(acc.CreditLimit) || 0;
         const balanceVal = parseFloat(acc.CurrentBalance);
         
         return (
           <View key={acc.AccountID} style={styles.cardContainer}>
             {/* Real Visual Card */}
-            <View style={[styles.bankCard, { backgroundColor: cardTheme.bg }]}>
+            <View 
+              style={[
+                styles.bankCard, 
+                { 
+                  backgroundColor: cardTheme.bg,
+                  shadowColor: cardTheme.bg
+                }
+              ]}
+            >
               <View style={styles.cardTop}>
                 <View style={[styles.cardChip, { backgroundColor: cardTheme.chip }]} />
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -121,6 +244,23 @@ export default function AccountsScreen({ theme }) {
                   </Text>
                 </View>
               </View>
+            </View>
+
+            {/* Additional details & delete action strip */}
+            <View style={[styles.cardActionRow, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.actionRowText, { color: theme.textSecondary }]}>
+                  🏦 {acc.BankName || "Generic Wallet"}
+                  {acc.AccountType === "Credit Card" && ` | limit: ${formatCurrency(limitVal)}`}
+                </Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => handleDeleteAccount(acc.AccountID)} 
+                style={styles.deleteBtn}
+              >
+                <Feather name="trash-2" size={13} color={theme.accentRose} />
+                <Text style={[styles.deleteBtnText, { color: theme.accentRose }]}>Remove</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Credit Card Utilization Bar */}
@@ -148,6 +288,165 @@ export default function AccountsScreen({ theme }) {
           </View>
         );
       })}
+
+      {/* CREATE ACCOUNT DIALOG MODAL */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"} 
+            style={{ width: "100%", maxHeight: "88%" }}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
+              
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>⚡ Register Financial Vault</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <Feather name="x" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView contentContainerStyle={styles.modalScroll}>
+                
+                {/* Account Type Selector */}
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Account Type</Text>
+                <View style={styles.pickerRow}>
+                  {["Bank Account", "Credit Card", "Wallet"].map(type => {
+                    const isSelected = accountType === type;
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        onPress={() => setAccountType(type)}
+                        style={[
+                          styles.pickerPill,
+                          { 
+                            backgroundColor: isSelected ? theme.accentPurple : "rgba(255,255,255,0.05)",
+                            borderColor: isSelected ? theme.accentPurple : theme.cardBorder
+                          }
+                        ]}
+                      >
+                        <Text style={[styles.pickerPillText, { color: isSelected ? "#FFFFFF" : theme.textSecondary }]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Display Name Input */}
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Account Display Name</Text>
+                <TextInput
+                  placeholder="e.g. HDFC Salary Account"
+                  placeholderTextColor="rgba(255,255,255,0.25)"
+                  style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                  value={accountName}
+                  onChangeText={setAccountName}
+                />
+
+                {/* Balance & Optional Limits */}
+                <Text style={[styles.label, { color: theme.textSecondary }]}>
+                  {accountType === "Credit Card" ? "Owed Balance" : "Opening Balance"}
+                </Text>
+                <TextInput
+                  placeholder="0.00"
+                  placeholderTextColor="rgba(255,255,255,0.25)"
+                  keyboardType="numeric"
+                  style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                  value={currentBalance}
+                  onChangeText={setCurrentBalance}
+                />
+
+                {accountType === "Credit Card" && (
+                  <>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Maximum Credit Limit</Text>
+                    <TextInput
+                      placeholder="5000"
+                      placeholderTextColor="rgba(255,255,255,0.25)"
+                      keyboardType="numeric"
+                      style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                      value={creditLimit}
+                      onChangeText={setCreditLimit}
+                    />
+                  </>
+                )}
+
+                {/* Custom Bank Name and Last 4 digits */}
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Institution / Bank</Text>
+                    <TextInput
+                      placeholder="e.g. Chase"
+                      placeholderTextColor="rgba(255,255,255,0.25)"
+                      style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                      value={bankName}
+                      onChangeText={setBankName}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Last 4 Digits</Text>
+                    <TextInput
+                      placeholder="4920"
+                      placeholderTextColor="rgba(255,255,255,0.25)"
+                      maxLength={4}
+                      keyboardType="numeric"
+                      style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                      value={cardLast4Digits}
+                      onChangeText={setCardLast4Digits}
+                    />
+                  </View>
+                </View>
+
+                {/* Color swatch personalization */}
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Personalize Card Theme</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 4 }} contentContainerStyle={{ gap: 10, paddingRight: 10 }}>
+                  {CARD_PALETTE.map(col => {
+                    const isActive = selectedColor === col;
+                    return (
+                      <TouchableOpacity
+                        key={col}
+                        onPress={() => setSelectedColor(col)}
+                        style={[
+                          styles.colorSwatch,
+                          {
+                            backgroundColor: col,
+                            borderColor: isActive ? "#FFFFFF" : "rgba(255,255,255,0.15)",
+                            borderWidth: isActive ? 2 : 1,
+                            transform: isActive ? [{ scale: 1.1 }] : [{ scale: 1 }]
+                          }
+                        ]}
+                      />
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Submitting/Sync indicator button */}
+                <TouchableOpacity
+                  onPress={handleAddAccountSubmit}
+                  disabled={submitting}
+                  style={[
+                    styles.submitBtn,
+                    { 
+                      backgroundColor: theme.accentPurple,
+                      opacity: submitting ? 0.6 : 1,
+                      marginTop: 10
+                    }
+                  ]}
+                >
+                  <Text style={styles.submitBtnText}>
+                    {submitting ? "Syncing banking vaults..." : "Register Vault Asset"}
+                  </Text>
+                </TouchableOpacity>
+
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
     </ScrollView>
   );
@@ -223,11 +522,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 20,
     justifyContent: "space-between",
-    shadowColor: "#000000",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 6,
   },
   cardTop: {
     flexDirection: "row",
@@ -303,5 +601,124 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 2.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    width: "100%",
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 25,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  modalScroll: {
+    gap: 12,
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: "700",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 4,
+  },
+  pickerPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  submitBtn: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submitBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  cardActionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    padding: 12,
+    marginTop: -8,
+    zIndex: -1,
+    paddingTop: 16,
+  },
+  actionRowText: {
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  deleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  deleteBtnText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  addVaultBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  addVaultBtnText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
   }
 });

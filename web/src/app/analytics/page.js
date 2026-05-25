@@ -44,7 +44,8 @@ const CustomTooltip = ({ active, payload, formatCurrency }) => {
 };
 
 export default function Analytics() {
-  const { analytics, loading, formatCurrency } = useData();
+  const { analytics, transactions, loading, formatCurrency } = useData();
+  const [timeframe, setTimeframe] = React.useState("Monthly");
 
   if (loading) {
     return (
@@ -54,44 +55,174 @@ export default function Analytics() {
     );
   }
 
-  // Fallbacks if analytics hasn't loaded yet
-  const trendData = analytics?.dailyTrends || [
-    { date: "May 15", amount: 150 },
-    { date: "May 18", amount: 320 },
-    { date: "May 20", amount: 45 },
-    { date: "May 22", amount: 180 },
-    { date: "May 24", amount: 500 }
-  ];
+  // Compute multi-timeframe analytics dynamically from local ledger transactions
+  const { trendData, breakdownData, summary } = React.useMemo(() => {
+    if (!transactions || transactions.length === 0) {
+      return {
+        trendData: analytics?.dailyTrends || [
+          { date: "May 15", amount: 150 },
+          { date: "May 18", amount: 320 },
+          { date: "May 20", amount: 45 },
+          { date: "May 22", amount: 180 },
+          { date: "May 24", amount: 500 }
+        ],
+        breakdownData: analytics?.categoryBreakdown || [
+          { name: "Rent", value: 1200 },
+          { name: "Dining Out", value: 320 },
+          { name: "Groceries", value: 180 },
+          { name: "Entertainment", value: 45 }
+        ],
+        summary: analytics?.summary || {
+          salary: 5000,
+          totalExpense: 1745,
+          netSavings: 3255,
+          splitExpenses: { Need: 1380, Want: 365, Savings: 0 }
+        }
+      };
+    }
 
-  const breakdownData = analytics?.categoryBreakdown || [
-    { name: "Rent", value: 1200 },
-    { name: "Dining Out", value: 320 },
-    { name: "Groceries", value: 180 },
-    { name: "Entertainment", value: 45 }
-  ];
+    const now = new Date();
+    let limitDate = new Date();
+    
+    if (timeframe === "Weekly") {
+      limitDate.setDate(now.getDate() - 7);
+    } else if (timeframe === "Monthly") {
+      limitDate.setDate(now.getDate() - 30);
+    } else if (timeframe === "Yearly") {
+      limitDate.setDate(now.getDate() - 365);
+    }
 
-  const summary = analytics?.summary || {
-    salary: 5000,
-    totalExpense: 1745,
-    netSavings: 3255,
-    splitExpenses: { Need: 1380, Want: 365, Savings: 0 }
-  };
+    // Filter txns within timeframe
+    const filteredTxns = transactions.filter(t => {
+      const tDate = new Date(t.Date);
+      return tDate >= limitDate && tDate <= now;
+    });
 
-  const currentMonthName = new Date().toLocaleString("default", { month: "long" });
+    // Compute Income & Expense
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let needSpend = 0;
+    let wantSpend = 0;
+    let savingsSpend = 0;
+
+    const catMap = {};
+    const trendMap = {};
+
+    filteredTxns.forEach(t => {
+      const amt = parseFloat(t.Amount) || 0;
+      if (t.TransactionType === "Income") {
+        totalIncome += amt;
+      } else {
+        totalExpense += amt;
+        if (t.BudgetType === "Need") needSpend += amt;
+        else if (t.BudgetType === "Want") wantSpend += amt;
+        else if (t.BudgetType === "Savings") savingsSpend += amt;
+
+        catMap[t.Category] = (catMap[t.Category] || 0) + amt;
+
+        let key = "";
+        if (timeframe === "Yearly") {
+          const d = new Date(t.Date);
+          key = d.toLocaleString("default", { month: "short", year: "2-digit" });
+        } else {
+          const d = new Date(t.Date);
+          key = d.toLocaleString("default", { month: "short", day: "numeric" });
+        }
+        trendMap[key] = (trendMap[key] || 0) + amt;
+      }
+    });
+
+    // Format category breakdown
+    const breakdown = Object.keys(catMap).map(name => ({
+      name,
+      value: catMap[name]
+    })).sort((a, b) => b.value - a.value);
+
+    // Format trend data
+    let trend = [];
+    if (timeframe === "Weekly") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(now.getDate() - i);
+        const label = d.toLocaleString("default", { month: "short", day: "numeric" });
+        trend.push({
+          date: label,
+          amount: trendMap[label] || 0
+        });
+      }
+    } else if (timeframe === "Monthly") {
+      const sortedKeys = Object.keys(trendMap).sort((a, b) => new Date(a) - new Date(b));
+      if (sortedKeys.length > 0) {
+        trend = sortedKeys.map(k => ({ date: k, amount: trendMap[k] }));
+      } else {
+        for (let i = 14; i >= 0; i -= 2) {
+          const d = new Date();
+          d.setDate(now.getDate() - i);
+          const label = d.toLocaleString("default", { month: "short", day: "numeric" });
+          trend.push({ date: label, amount: 0 });
+        }
+      }
+    } else if (timeframe === "Yearly") {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(now.getMonth() - i);
+        const label = d.toLocaleString("default", { month: "short", year: "2-digit" });
+        trend.push({
+          date: label,
+          amount: trendMap[label] || 0
+        });
+      }
+    }
+
+    return {
+      trendData: trend,
+      breakdownData: breakdown.length > 0 ? breakdown : [{ name: "No Expense", value: 0 }],
+      summary: {
+        salary: analytics?.summary?.salary || 5000,
+        totalIncome,
+        totalExpense,
+        netSavings: totalIncome - totalExpense,
+        splitExpenses: { Need: needSpend, Want: wantSpend, Savings: savingsSpend }
+      }
+    };
+  }, [transactions, timeframe, analytics]);
 
   return (
     <div>
       {/* Header */}
-      <header className="dashboard-header">
+      <header className="dashboard-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
         <div className="header-title-sec">
           <h1>Visual Financial Analytics</h1>
           <span className="header-subtitle">
-            Deep dive spending dashboards and monthly trends for {currentMonthName} 2026.
+            Deep dive spending dashboards and dynamic timeframe trends.
           </span>
         </div>
-        <div className="glow-pill cyan">
-          <BarChart2 size={12} />
-          <span>Real-time charting active</span>
+        
+        {/* Timeframe selector pills */}
+        <div style={{ display: "flex", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "4px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)", height: "fit-content" }}>
+          {["Weekly", "Monthly", "Yearly"].map(tf => {
+            const isActive = timeframe === tf;
+            return (
+              <button
+                key={tf}
+                type="button"
+                onClick={() => setTimeframe(tf)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  border: isActive ? "1px solid var(--neon-purple)" : "1px solid transparent",
+                  background: isActive ? "rgba(139, 92, 246, 0.2)" : "transparent",
+                  color: isActive ? "#fff" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "0.8rem",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                {tf}
+              </button>
+            );
+          })}
         </div>
       </header>
 

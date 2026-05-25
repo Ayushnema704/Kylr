@@ -15,27 +15,46 @@ export default function Accounts() {
   const [accountName, setAccountName] = useState("");
   const [currentBalance, setCurrentBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
-  const [bankName, setBankName] = useState("HDFC Bank");
+  const [bankName, setBankName] = useState("");
   const [cardLast4Digits, setCardLast4Digits] = useState("");
+
+  // Custom Fintech Card Theme states & Palette
+  const CARD_PALETTE = [
+    "#F43F5E", // Rose
+    "#10B981", // Emerald
+    "#F59E0B", // Amber
+    "#EC4899", // Pink
+    "#8B5CF6", // Purple
+    "#3B82F6", // Blue
+    "#06B6D4", // Cyan
+    "#6B7280"  // Gray
+  ];
+  const [selectedColor, setSelectedColor] = useState(CARD_PALETTE[0]);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!accountName.trim()) return;
 
+    setSubmitting(true);
     const res = await addAccount({
       accountType,
       accountName,
       currentBalance: parseFloat(currentBalance) || 0,
       creditLimit: parseFloat(creditLimit) || 0,
-      bankName,
-      cardLast4Digits: cardLast4Digits || "0000"
+      bankName: bankName.trim() || "Generic",
+      cardLast4Digits: cardLast4Digits || "0000",
+      color: selectedColor
     });
+    setSubmitting(false);
 
     if (res.success) {
       setAccountName("");
+      setBankName("");
       setCurrentBalance("");
       setCreditLimit("");
       setCardLast4Digits("");
+      setSelectedColor(CARD_PALETTE[0]);
     }
   };
 
@@ -143,7 +162,13 @@ export default function Accounts() {
                 }}
               >
                 {/* Custom Visual Credit Card */}
-                <div className={getCardStyleClass(acc.BankName || acc.AccountName)}>
+                <div 
+                  className={getCardStyleClass(acc.BankName || acc.AccountName)}
+                  style={{
+                    background: acc.Color || acc.color || undefined,
+                    boxShadow: (acc.Color || acc.color) ? `0 10px 25px ${(acc.Color || acc.color)}4D` : undefined
+                  }}
+                >
                   <div className="card-top">
                     <div className="card-chip" />
                     <span className="card-brand">
@@ -264,20 +289,17 @@ export default function Accounts() {
 
             {/* Grid 2 Elements */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {/* Institution/Bank Selector */}
+              {/* Institution/Bank text field */}
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Institution / Bank</label>
-                <select 
-                  className="glass-select"
+                <input 
+                  type="text" 
+                  placeholder="e.g. Chase Bank"
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                >
-                  <option value="HDFC Bank">HDFC Bank</option>
-                  <option value="ICICI Bank">ICICI Bank</option>
-                  <option value="Paytm">Paytm / Wallet</option>
-                  <option value="SBI Bank">SBI Salary</option>
-                  <option value="Generic">Other / Cash</option>
-                </select>
+                  className="glass-input" 
+                  required
+                />
               </div>
 
               {/* Last 4 Digits */}
@@ -294,8 +316,41 @@ export default function Accounts() {
               </div>
             </div>
 
-            <button type="submit" className="glass-button" style={{ width: "100%" }}>
-              <Plus size={16} /> Register Financial Vault
+            {/* Custom Card Color Swatches */}
+            <div>
+              <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "8px" }}>Personalize Card Theme</label>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {CARD_PALETTE.map(col => {
+                  const isActive = selectedColor === col;
+                  return (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => setSelectedColor(col)}
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "50%",
+                        background: col,
+                        border: isActive ? "2px solid #fff" : "1px solid rgba(255, 255, 255, 0.15)",
+                        boxShadow: isActive ? `0 0 10px ${col}` : "none",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        transform: isActive ? "scale(1.12)" : "scale(1)"
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              className="glass-button" 
+              style={{ width: "100%", opacity: submitting ? 0.6 : 1 }}
+              disabled={submitting}
+            >
+              <Plus size={16} /> {submitting ? "Syncing banking vaults..." : "Register Financial Vault"}
             </button>
           </form>
         </div>

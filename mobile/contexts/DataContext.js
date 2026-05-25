@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
 
@@ -186,7 +187,10 @@ export function DataProvider({ children }) {
   // Refresh all user records
   const refreshData = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    // Only trigger full screen loading block on initial blank mount to prevent background-sync lag/flashing
+    if (transactions.length === 0 && accounts.length === 0) {
+      setLoading(true);
+    }
 
     if (isSandbox) {
       const localTxns = await AsyncStorage.getItem("kylr_txns");
@@ -263,6 +267,35 @@ export function DataProvider({ children }) {
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  // Background polling sync (Google Workspace style auto-sync)
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      // Only sync if the app is currently in the foreground (active)
+      if (AppState.currentState === "active") {
+        refreshData();
+      }
+    }, 8000); // sync every 8 seconds
+
+    return () => clearInterval(interval);
+  }, [user, refreshData]);
+
+  // Sync immediately when mobile app returns to the foreground
+  useEffect(() => {
+    if (!user) return;
+
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        refreshData();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [user, refreshData]);
 
   // ==========================================
   // CURRENCY CONVERSION AND FORMATTING
@@ -465,6 +498,268 @@ export function DataProvider({ children }) {
     }
   };
 
+  // ==========================================
+  // ACCOUNTS CRUD CORE METHODS
+  // ==========================================
+  const addAccount = async (data) => {
+    if (isSandbox) {
+      const newAcc = {
+        AccountID: "ACC_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+        AccountType: data.accountType || "Bank Account",
+        AccountName: data.accountName,
+        CurrentBalance: parseFloat(data.currentBalance) || 0,
+        CreditLimit: parseFloat(data.creditLimit) || 0,
+        BankName: data.bankName || "",
+        CardLast4Digits: data.cardLast4Digits || "0000",
+        CreatedAt: new Date().toISOString(),
+        Color: data.color || "#1E1B4B"
+      };
+
+      const updatedAccs = [...accounts, newAcc];
+      setAccounts(updatedAccs);
+      await AsyncStorage.setItem("kylr_accounts", JSON.stringify(updatedAccs));
+      recalculateSandboxAnalytics(transactions, updatedAccs);
+      return { success: true };
+    } else {
+      try {
+        const postUrl = `${appsScriptUrl}?action=addAccount&uid=${user.uid}`;
+        const body = {
+          accountType: data.accountType || "Bank Account",
+          accountName: data.accountName,
+          currentBalance: parseFloat(data.currentBalance) || 0,
+          creditLimit: parseFloat(data.creditLimit) || 0,
+          bankName: data.bankName || "",
+          cardLast4Digits: data.cardLast4Digits || "0000",
+          color: data.color || "#1E1B4B"
+        };
+
+        const res = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (json.success) {
+          await refreshData();
+          return { success: true };
+        }
+      } catch (err) {
+        console.error("API Add Account Error: ", err);
+      }
+      return { success: false };
+    }
+  };
+
+  const deleteAccount = async (accId) => {
+    if (isSandbox) {
+      const updatedAccs = accounts.filter(a => a.AccountID !== accId);
+      setAccounts(updatedAccs);
+      await AsyncStorage.setItem("kylr_accounts", JSON.stringify(updatedAccs));
+      recalculateSandboxAnalytics(transactions, updatedAccs);
+      return { success: true };
+    } else {
+      try {
+        const postUrl = `${appsScriptUrl}?action=deleteAccount&uid=${user.uid}&accountId=${accId}`;
+        const res = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" }
+        });
+        const json = await res.json();
+        if (json.success) {
+          await refreshData();
+          return { success: true };
+        }
+      } catch (err) {
+        console.error("API Delete Account Error: ", err);
+      }
+      return { success: false };
+    }
+  };
+
+  const addCategory = async (data) => {
+    if (isSandbox) {
+      const newCat = {
+        CategoryID: "CAT_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+        CategoryName: data.categoryName,
+        Icon: data.icon || "Tag",
+        Color: data.color || "#8B5CF6",
+        BudgetType: data.budgetType || "Want",
+        CreatedAt: new Date().toISOString()
+      };
+      const updated = [...categories, newCat];
+      setCategories(updated);
+      await AsyncStorage.setItem("kylr_categories", JSON.stringify(updated));
+      return { success: true };
+    } else {
+      try {
+        const payload = {
+          action: "addCategory",
+          uid: user.uid,
+          categoryName: data.categoryName,
+          icon: data.icon,
+          color: data.color,
+          budgetType: data.budgetType
+        };
+        const res = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+        const resJson = await res.json();
+        if (resJson.success) {
+          await refreshData();
+        }
+        return resJson;
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }
+  };
+
+  const deleteCategory = async (catId) => {
+    if (isSandbox) {
+      const updated = categories.filter(c => c.CategoryID !== catId);
+      setCategories(updated);
+      await AsyncStorage.setItem("kylr_categories", JSON.stringify(updated));
+      return { success: true };
+    } else {
+      try {
+        const payload = {
+          action: "deleteCategory",
+          uid: user.uid,
+          categoryId: catId
+        };
+        const res = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+        const resJson = await res.json();
+        if (resJson.success) {
+          await refreshData();
+        }
+        return resJson;
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }
+  };
+
+  const updateBudget = async (data) => {
+    const oldCurrency = user?.currency || "USD";
+    const newCurrency = data.currency || oldCurrency;
+    let convertedSalary = parseFloat(data.salary) || user.salary;
+
+    if (isSandbox) {
+      let updatedTxns = [...transactions];
+      let updatedAccs = [...accounts];
+
+      if (oldCurrency !== newCurrency) {
+        // Convert all transaction amounts
+        updatedTxns = transactions.map(t => ({
+          ...t,
+          Amount: parseFloat(convertCurrency(t.Amount, oldCurrency, newCurrency).toFixed(2))
+        }));
+        
+        // Convert all account balances and limits
+        updatedAccs = accounts.map(a => ({
+          ...a,
+          CurrentBalance: parseFloat(convertCurrency(a.CurrentBalance, oldCurrency, newCurrency).toFixed(2)),
+          CreditLimit: parseFloat(convertCurrency(a.CreditLimit, oldCurrency, newCurrency).toFixed(2))
+        }));
+
+        await AsyncStorage.setItem("kylr_txns", JSON.stringify(updatedTxns));
+        await AsyncStorage.setItem("kylr_accounts", JSON.stringify(updatedAccs));
+      }
+
+      // Modify auth session user object
+      const updatedUser = {
+        ...user,
+        displayName: data.name || user.displayName,
+        salary: convertedSalary,
+        budgetRuleEnabled: data.budgetRuleEnabled === true,
+        needsPercentage: parseFloat(data.needsPercentage) || user.needsPercentage,
+        wantsPercentage: parseFloat(data.wantsPercentage) || user.wantsPercentage,
+        savingsPercentage: parseFloat(data.savingsPercentage) || user.savingsPercentage,
+        currency: newCurrency
+      };
+      
+      await AsyncStorage.setItem("kylr_user", JSON.stringify(updatedUser));
+      return { success: true };
+    } else {
+      try {
+        const payload = {
+          action: "updateBudget",
+          uid: user.uid,
+          name: data.name,
+          salary: data.salary,
+          budgetRuleEnabled: data.budgetRuleEnabled,
+          needsPercentage: data.needsPercentage,
+          wantsPercentage: data.wantsPercentage,
+          savingsPercentage: data.savingsPercentage,
+          currency: data.currency
+        };
+        const res = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+        const resJson = await res.json();
+        if (resJson.success) {
+          // Sync local profile state
+          const updatedUser = {
+            ...user,
+            displayName: data.name || user.displayName,
+            salary: parseFloat(data.salary) || user.salary,
+            budgetRuleEnabled: data.budgetRuleEnabled === true,
+            needsPercentage: parseFloat(data.needsPercentage) || user.needsPercentage,
+            wantsPercentage: parseFloat(data.wantsPercentage) || user.wantsPercentage,
+            savingsPercentage: parseFloat(data.savingsPercentage) || user.savingsPercentage,
+            currency: data.currency || user.currency || "USD"
+          };
+          await AsyncStorage.setItem("kylr_user", JSON.stringify(updatedUser));
+          await refreshData();
+        }
+        return resJson;
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }
+  };
+
+  const generateGeminiInsightsMock = async (customPrompt) => {
+    setLoading(true);
+    try {
+      if (isSandbox) {
+        // Run sandbox simulation based on custom prompts
+        await new Promise(r => setTimeout(r, 1500)); // natural delay
+        const expenses = transactions.filter(t => t.TransactionType === "Expense");
+        const totalEx = expenses.reduce((acc, c) => acc + c.Amount, 0);
+        const topCat = analytics?.categoryBreakdown?.[0]?.name || "None";
+        
+        let customVal = `✨ **KYLR Gemini AI Review**: \n\n* 💸 **Budget Rule Health**: Your **salary utilization** is currently sitting at **${((totalEx / user.salary) * 100).toFixed(0)}%**. You have been tracking beautifully on your **Needs (${analytics?.summary?.splitExpenses?.Need || 0} spend)** but keep an eye on your **Wants** which comprises a large portion of your cards! \n* 🚨 **Spending Alerts**: We noticed **${topCat}** is your #1 spending blackhole this month ($${analytics?.categoryBreakdown?.[0]?.value || 0} total). Swiggy/Zomato dine-outs are currently spiking on weekends by **18.4%**. Consider capping card payments!\n* 🚀 **Aura Capitalist Action**: Take **$200** from your HDFC Savings cash balance and drop it into **SIP Investments** right now to lock in that **20% savings goal** before you buy that next cart item. Stay winning!`;
+        setAiInsights(customVal);
+        setLoading(false);
+        return { success: true, insights: customVal };
+      } else {
+        // Query Gemini through backend Google Apps Script gateway
+        if (!appsScriptUrl) return { success: false, error: "Setup Google Apps Script Web App ID first." };
+        const res = await fetch(`${appsScriptUrl}?action=getAiInsights&uid=${user.uid}&geminiApiKey=${geminiApiKey}`);
+        const json = await res.json();
+        if (json.success) {
+          setAiInsights(json.insights);
+          setLoading(false);
+          return json;
+        }
+        setLoading(false);
+        return { success: false, error: json.error };
+      }
+    } catch (e) {
+      setLoading(false);
+      return { success: false, error: e.toString() };
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -480,6 +775,12 @@ export function DataProvider({ children }) {
         refreshData,
         addTransaction,
         deleteTransaction,
+        addAccount,
+        deleteAccount,
+        addCategory,
+        deleteCategory,
+        updateBudget,
+        generateGeminiInsightsMock,
         parseNaturalLanguageExpense,
         exchangeRates,
         convertCurrency,
