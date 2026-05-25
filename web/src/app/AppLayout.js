@@ -31,18 +31,12 @@ export default function AppLayout({ children }) {
     setMounted(true);
     const savedTheme = localStorage.getItem("kylr_theme") || "dark";
     setTheme(savedTheme);
-
-    const isAuth = sessionStorage.getItem("kylr_is_authorized") === "true";
-    if (isAuth) {
-      setAuthorized(true);
-    }
   }, []);
 
   const handleUnlock = (e) => {
     e.preventDefault();
     const correctPassword = process.env.NEXT_PUBLIC_DEPLOYMENT_PASSWORD || "kylr2026";
     if (passcode === correctPassword) {
-      sessionStorage.setItem("kylr_is_authorized", "true");
       setAuthorized(true);
       setError("");
     } else {
