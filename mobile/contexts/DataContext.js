@@ -187,10 +187,6 @@ export function DataProvider({ children }) {
   // Refresh all user records
   const refreshData = useCallback(async () => {
     if (!user) return;
-    // Only trigger full screen loading block on initial blank mount to prevent background-sync lag/flashing
-    if (transactions.length === 0 && accounts.length === 0) {
-      setLoading(true);
-    }
 
     if (isSandbox) {
       const localTxns = await AsyncStorage.getItem("kylr_txns");
