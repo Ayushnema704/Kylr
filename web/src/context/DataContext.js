@@ -600,7 +600,9 @@ export function DataProvider({ children }) {
         BankName: data.bankName || "",
         CardLast4Digits: data.cardLast4Digits || "0000",
         CreatedAt: new Date().toISOString(),
-        Color: data.color || "#1E1B4B"
+        Color: data.color || "#1E1B4B",
+        BuyPrice: parseFloat(data.buyPrice) || 0,
+        Quantity: parseFloat(data.quantity) || 0
       };
       const updated = [...accounts, newAcc];
       setAccounts(updated);
@@ -618,7 +620,9 @@ export function DataProvider({ children }) {
           creditLimit: data.creditLimit,
           bankName: data.bankName,
           cardLast4Digits: data.cardLast4Digits,
-          color: data.color || "#1E1B4B"
+          color: data.color || "#1E1B4B",
+          buyPrice: data.buyPrice || 0,
+          quantity: data.quantity || 0
         };
         const res = await fetch(appsScriptUrl, {
           method: "POST",

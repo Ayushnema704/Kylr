@@ -17,6 +17,8 @@ export default function Accounts() {
   const [creditLimit, setCreditLimit] = useState("");
   const [bankName, setBankName] = useState("");
   const [cardLast4Digits, setCardLast4Digits] = useState("");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [quantity, setQuantity] = useState("");
 
   // Custom Fintech Card Theme states & Palette
   const CARD_PALETTE = [
@@ -44,7 +46,9 @@ export default function Accounts() {
       creditLimit: parseFloat(creditLimit) || 0,
       bankName: bankName.trim() || "Generic",
       cardLast4Digits: cardLast4Digits || "0000",
-      color: selectedColor
+      color: selectedColor,
+      buyPrice: parseFloat(buyPrice) || 0,
+      quantity: parseFloat(quantity) || 0
     });
     setSubmitting(false);
 
@@ -54,6 +58,8 @@ export default function Accounts() {
       setCurrentBalance("");
       setCreditLimit("");
       setCardLast4Digits("");
+      setBuyPrice("");
+      setQuantity("");
       setSelectedColor(CARD_PALETTE[0]);
     }
   };
@@ -77,7 +83,12 @@ export default function Accounts() {
   // Aggregate totals
   const totalAssets = accounts
     .filter(a => a.AccountType !== "Credit Card")
-    .reduce((sum, a) => sum + parseFloat(a.CurrentBalance), 0);
+    .reduce((sum, a) => {
+      const bal = parseFloat(a.CurrentBalance) || 0;
+      const qty = parseFloat(a.Quantity || a.quantity) || 0;
+      const isInvestment = a.AccountType === "Investment (Mutual Fund)" || a.AccountType === "Investment (Stocks)";
+      return sum + (isInvestment ? (bal * qty) : bal);
+    }, 0);
 
   const totalLiabilities = accounts
     .filter(a => a.AccountType === "Credit Card")
@@ -151,78 +162,127 @@ export default function Accounts() {
           </p>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-            {accounts.map(acc => (
-              <div 
-                key={acc.AccountID} 
-                style={{ 
-                  display: "flex", 
-                  flexDirection: "column", 
-                  gap: "12px", 
-                  position: "relative" 
-                }}
-              >
-                {/* Custom Visual Credit Card */}
+            {accounts.map(acc => {
+              const isInvestment = acc.AccountType === "Investment (Mutual Fund)" || acc.AccountType === "Investment (Stocks)";
+              const qtyVal = parseFloat(acc.Quantity || acc.quantity) || 0;
+              const buyPriceVal = parseFloat(acc.BuyPrice || acc.buyPrice) || 0;
+              const currentPriceVal = parseFloat(acc.CurrentBalance) || 0;
+              const totalInvestedVal = qtyVal * buyPriceVal;
+              const totalCurrentVal = qtyVal * currentPriceVal;
+              const gainLossAmount = totalCurrentVal - totalInvestedVal;
+              const gainLossPercent = totalInvestedVal > 0 ? (gainLossAmount / totalInvestedVal) * 100 : 0;
+              const isProfit = gainLossAmount >= 0;
+
+              return (
                 <div 
-                  className={getCardStyleClass(acc.BankName || acc.AccountName)}
-                  style={{
-                    background: acc.Color || acc.color || undefined,
-                    boxShadow: (acc.Color || acc.color) ? `0 10px 25px ${(acc.Color || acc.color)}4D` : undefined
+                  key={acc.AccountID} 
+                  style={{ 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    gap: "12px", 
+                    position: "relative" 
                   }}
                 >
-                  <div className="card-top">
-                    <div className="card-chip" />
-                    <span className="card-brand">
-                      {acc.AccountType === "Credit Card" ? "POSTPAID" : "LIQUID"}
-                    </span>
-                  </div>
-                  
-                  <div className="card-middle">
-                    <span className="card-number">
-                      •••• •••• •••• {acc.CardLast4Digits || "9820"}
-                    </span>
-                  </div>
-
-                  <div className="card-bottom">
-                    <div>
-                      <span className="card-holder">
-                        {acc.AccountName}
+                  {/* Custom Visual Credit Card */}
+                  <div 
+                    className={getCardStyleClass(acc.BankName || acc.AccountName)}
+                    style={{
+                      background: acc.Color || acc.color || undefined,
+                      boxShadow: (acc.Color || acc.color) ? `0 10px 25px ${(acc.Color || acc.color)}4D` : undefined
+                    }}
+                  >
+                    {isInvestment && qtyVal > 0 && buyPriceVal > 0 && (
+                      <div 
+                        style={{
+                          position: "absolute",
+                          top: "16px",
+                          right: "16px",
+                          background: isProfit ? "rgba(16, 185, 129, 0.18)" : "rgba(244, 63, 94, 0.18)",
+                          border: isProfit ? "1px solid var(--neon-emerald)" : "1px solid var(--neon-rose)",
+                          color: isProfit ? "var(--neon-emerald)" : "var(--neon-rose)",
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          boxShadow: isProfit ? "0 0 10px rgba(16, 185, 129, 0.2)" : "0 0 10px rgba(244, 63, 94, 0.2)",
+                          zIndex: 3
+                        }}
+                      >
+                        {isProfit ? "▲" : "▼"} {isProfit ? "+" : ""}{gainLossPercent.toFixed(2)}%
+                      </div>
+                    )}
+                    <div className="card-top">
+                      <div className="card-chip" />
+                      <span className="card-brand">
+                        {acc.AccountType === "Credit Card" 
+                          ? "POSTPAID" 
+                          : isInvestment 
+                            ? (acc.AccountType === "Investment (Mutual Fund)" ? "MUTUAL FUND" : "STOCK PORTFOLIO") 
+                            : "LIQUID"
+                        }
                       </span>
                     </div>
-                    <div className="card-balance-sec">
-                      <span className="card-bal-label">Balance</span>
-                      <div className="card-balance">
-                        {formatCurrency(acc.CurrentBalance)}
+                    
+                    <div className="card-middle">
+                      {isInvestment ? (
+                        <span className="card-number" style={{ fontSize: "0.85rem", letterSpacing: "normal", fontFamily: "inherit", textTransform: "uppercase" }}>
+                          QTY: {qtyVal} | BUY PRICE: {formatCurrency(buyPriceVal)}
+                        </span>
+                      ) : (
+                        <span className="card-number">
+                          •••• •••• •••• {acc.CardLast4Digits || "9820"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="card-bottom">
+                      <div>
+                        <span className="card-holder">
+                          {acc.AccountName}
+                        </span>
+                      </div>
+                      <div className="card-balance-sec">
+                        <span className="card-bal-label">
+                          {isInvestment ? "Current Value" : "Balance"}
+                        </span>
+                        <div className="card-balance">
+                          {isInvestment 
+                            ? formatCurrency(totalCurrentVal) 
+                            : formatCurrency(acc.CurrentBalance)
+                          }
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
- 
-                {/* Additional details underneath card */}
-                <div className="glass-card" style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                    🏦 <strong>Institution:</strong> {acc.BankName || "General Wallet"} 
-                    {acc.AccountType === "Credit Card" && ` | limit: ${formatCurrency(acc.CreditLimit)}`}
+   
+                  {/* Additional details underneath card */}
+                  <div className="glass-card" style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                      🏦 <strong>Institution:</strong> {acc.BankName || "General Wallet"} 
+                      {acc.AccountType === "Credit Card" && ` | limit: ${formatCurrency(acc.CreditLimit)}`}
+                      {isInvestment && ` | Buy Price: ${formatCurrency(buyPriceVal)}`}
+                    </div>
+                    <button 
+                      onClick={() => deleteAccount(acc.AccountID)}
+                      style={{ 
+                        background: "transparent", 
+                        border: "none", 
+                        color: "rgba(244, 63, 94, 0.4)", 
+                        cursor: "pointer", 
+                        fontSize: "0.85rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                      onMouseEnter={(e) => e.target.style.color = "var(--neon-rose)"}
+                      onMouseLeave={(e) => e.target.style.color = "rgba(244, 63, 94, 0.4)"}
+                    >
+                      <Trash2 size={14} /> Remove
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => deleteAccount(acc.AccountID)}
-                    style={{ 
-                      background: "transparent", 
-                      border: "none", 
-                      color: "rgba(244, 63, 94, 0.4)", 
-                      cursor: "pointer", 
-                      fontSize: "0.85rem",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px"
-                    }}
-                    onMouseEnter={(e) => e.target.style.color = "var(--neon-rose)"}
-                    onMouseLeave={(e) => e.target.style.color = "rgba(244, 63, 94, 0.4)"}
-                  >
-                    <Trash2 size={14} /> Remove
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -242,6 +302,8 @@ export default function Accounts() {
                 <option value="Bank Account">Bank Account (Savings / Salary)</option>
                 <option value="Credit Card">Credit Card (Postpaid Limit)</option>
                 <option value="Wallet">Digital Wallet (Paytm, Cash)</option>
+                <option value="Investment (Mutual Fund)">Investment (Mutual Fund Holding)</option>
+                <option value="Investment (Stocks)">Investment (Stock Holding)</option>
               </select>
             </div>
 
@@ -261,10 +323,16 @@ export default function Accounts() {
             {/* Balances */}
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                {accountType === "Credit Card" ? `Current Owed Balance (${activeCurrency})` : `Opening Liquid Balance (${activeCurrency})`}
+                {accountType === "Credit Card" 
+                  ? `Current Owed Balance (${activeCurrency})` 
+                  : (accountType.startsWith("Investment"))
+                    ? `Current Price per unit (${activeCurrency})`
+                    : `Opening Liquid Balance (${activeCurrency})`
+                }
               </label>
               <input 
                 type="number" 
+                step="0.0001"
                 placeholder="0.00"
                 value={currentBalance}
                 onChange={(e) => setCurrentBalance(e.target.value)}
@@ -284,6 +352,36 @@ export default function Accounts() {
                   onChange={(e) => setCreditLimit(e.target.value)}
                   className="glass-input" 
                 />
+              </div>
+            )}
+
+            {/* Investment Specific Fields */}
+            {accountType.startsWith("Investment") && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Avg Buy Price ({activeCurrency})</label>
+                  <input 
+                    type="number" 
+                    step="0.0001"
+                    placeholder="150.00"
+                    value={buyPrice}
+                    onChange={(e) => setBuyPrice(e.target.value)}
+                    className="glass-input" 
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Number of Units</label>
+                  <input 
+                    type="number" 
+                    step="0.0001"
+                    placeholder="10"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    className="glass-input" 
+                    required
+                  />
+                </div>
               </div>
             )}
 

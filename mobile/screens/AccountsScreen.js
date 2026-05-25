@@ -25,6 +25,8 @@ export default function AccountsScreen({ theme }) {
   const [creditLimit, setCreditLimit] = useState("");
   const [bankName, setBankName] = useState("");
   const [cardLast4Digits, setCardLast4Digits] = useState("");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [quantity, setQuantity] = useState("");
   
   // High-End Fintech color palette swatches
   const CARD_PALETTE = [
@@ -44,7 +46,12 @@ export default function AccountsScreen({ theme }) {
   const { totalAssets, totalLiabilities, netWealth } = useMemo(() => {
     const assets = accounts
       .filter(a => a.AccountType !== "Credit Card")
-      .reduce((acc, a) => acc + parseFloat(a.CurrentBalance), 0);
+      .reduce((acc, a) => {
+        const bal = parseFloat(a.CurrentBalance) || 0;
+        const qty = parseFloat(a.Quantity || a.quantity) || 0;
+        const isInvestment = a.AccountType === "Investment (Mutual Fund)" || a.AccountType === "Investment (Stocks)";
+        return acc + (isInvestment ? (bal * qty) : bal);
+      }, 0);
 
     const liabilities = accounts
       .filter(a => a.AccountType === "Credit Card")
@@ -76,7 +83,9 @@ export default function AccountsScreen({ theme }) {
       creditLimit: parseFloat(creditLimit) || 0,
       bankName: bankName.trim() || "Generic",
       cardLast4Digits: cardLast4Digits || "0000",
-      color: selectedColor
+      color: selectedColor,
+      buyPrice: parseFloat(buyPrice) || 0,
+      quantity: parseFloat(quantity) || 0
     });
     setSubmitting(false);
 
@@ -86,6 +95,8 @@ export default function AccountsScreen({ theme }) {
       setCurrentBalance("");
       setCreditLimit("");
       setCardLast4Digits("");
+      setBuyPrice("");
+      setQuantity("");
       setSelectedColor(CARD_PALETTE[0]);
       setModalVisible(false);
       Alert.alert("Success", "Financial account added and synchronized!");
@@ -208,6 +219,22 @@ export default function AccountsScreen({ theme }) {
         const limitVal = parseFloat(acc.CreditLimit) || 0;
         const balanceVal = parseFloat(acc.CurrentBalance);
         
+        const isInvestment = acc.AccountType === "Investment (Mutual Fund)" || acc.AccountType === "Investment (Stocks)";
+        const qtyVal = parseFloat(acc.Quantity || acc.quantity) || 0;
+        const buyPriceVal = parseFloat(acc.BuyPrice || acc.buyPrice) || 0;
+        const currentPriceVal = parseFloat(acc.CurrentBalance) || 0;
+        const totalInvestedVal = qtyVal * buyPriceVal;
+        const totalCurrentVal = qtyVal * currentPriceVal;
+        const gainLossAmount = totalCurrentVal - totalInvestedVal;
+        const gainLossPercent = totalInvestedVal > 0 ? (gainLossAmount / totalInvestedVal) * 100 : 0;
+        const isProfit = gainLossAmount >= 0;
+
+        const brandLabel = acc.AccountType === "Credit Card" 
+          ? "KYLR POSTPAID" 
+          : isInvestment 
+            ? (acc.AccountType === "Investment (Mutual Fund)" ? "MUTUAL FUND" : "STOCK PORTFOLIO") 
+            : cardTheme.brand;
+
         return (
           <View key={acc.AccountID} style={styles.cardContainer}>
             {/* Real Visual Card */}
@@ -220,17 +247,39 @@ export default function AccountsScreen({ theme }) {
                 }
               ]}
             >
+              {isInvestment && qtyVal > 0 && buyPriceVal > 0 && (
+                <View 
+                  style={[
+                    styles.badgeContainer, 
+                    { 
+                      backgroundColor: isProfit ? "rgba(16, 185, 129, 0.18)" : "rgba(244, 63, 94, 0.18)",
+                      borderColor: isProfit ? "#10B981" : "#F43F5E",
+                    }
+                  ]}
+                >
+                  <Text style={[styles.badgeText, { color: isProfit ? "#10B981" : "#F43F5E" }]}>
+                    {isProfit ? "▲" : "▼"} {isProfit ? "+" : ""}{gainLossPercent.toFixed(2)}%
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.cardTop}>
                 <View style={[styles.cardChip, { backgroundColor: cardTheme.chip }]} />
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <Feather name="wifi" size={12} color={cardTheme.textColor} style={{ transform: [{ rotate: "90deg" }] }} />
-                  <Text style={[styles.cardBrand, { color: cardTheme.textColor }]}>{cardTheme.brand}</Text>
+                  <Text style={[styles.cardBrand, { color: cardTheme.textColor }]}>{brandLabel}</Text>
                 </View>
               </View>
 
-              <Text style={[styles.cardNumber, { color: cardTheme.textColor }]}>
-                ••••  ••••  ••••  {acc.CardLast4Digits || "0000"}
-              </Text>
+              {isInvestment ? (
+                <Text style={[styles.cardNumber, { color: cardTheme.textColor, fontSize: 12, letterSpacing: 0, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', textTransform: "uppercase" }]}>
+                  QTY: {qtyVal} | BUY: {formatCurrency(buyPriceVal)}
+                </Text>
+              ) : (
+                <Text style={[styles.cardNumber, { color: cardTheme.textColor }]}>
+                  ••••  ••••  ••••  {acc.CardLast4Digits || "0000"}
+                </Text>
+              )}
 
               <View style={styles.cardBottom}>
                 <View>
@@ -238,9 +287,11 @@ export default function AccountsScreen({ theme }) {
                   <Text style={[styles.cardHolder, { color: cardTheme.textColor }]}>{acc.AccountName}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={[styles.cardLabelText, { color: cardTheme.subColor }]}>BALANCE</Text>
+                  <Text style={[styles.cardLabelText, { color: cardTheme.subColor }]}>
+                    {isInvestment ? "CURRENT VALUE" : "BALANCE"}
+                  </Text>
                   <Text style={[styles.cardBalance, { color: cardTheme.textColor }]}>
-                    {formatCurrency(balanceVal)}
+                    {isInvestment ? formatCurrency(totalCurrentVal) : formatCurrency(balanceVal)}
                   </Text>
                 </View>
               </View>
@@ -252,6 +303,7 @@ export default function AccountsScreen({ theme }) {
                 <Text style={[styles.actionRowText, { color: theme.textSecondary }]}>
                   🏦 {acc.BankName || "Generic Wallet"}
                   {acc.AccountType === "Credit Card" && ` | limit: ${formatCurrency(limitVal)}`}
+                  {isInvestment && ` | Buy Price: ${formatCurrency(buyPriceVal)}`}
                 </Text>
               </View>
               <TouchableOpacity 
@@ -315,8 +367,8 @@ export default function AccountsScreen({ theme }) {
                 
                 {/* Account Type Selector */}
                 <Text style={[styles.label, { color: theme.textSecondary }]}>Account Type</Text>
-                <View style={styles.pickerRow}>
-                  {["Bank Account", "Credit Card", "Wallet"].map(type => {
+                <View style={[styles.pickerRow, { flexWrap: "wrap" }]}>
+                  {["Bank Account", "Credit Card", "Wallet", "Investment (Mutual Fund)", "Investment (Stocks)"].map(type => {
                     const isSelected = accountType === type;
                     return (
                       <TouchableOpacity
@@ -326,7 +378,10 @@ export default function AccountsScreen({ theme }) {
                           styles.pickerPill,
                           { 
                             backgroundColor: isSelected ? theme.accentPurple : "rgba(255,255,255,0.05)",
-                            borderColor: isSelected ? theme.accentPurple : theme.cardBorder
+                            borderColor: isSelected ? theme.accentPurple : theme.cardBorder,
+                            flex: 0,
+                            minWidth: "47%",
+                            marginBottom: 4
                           }
                         ]}
                       >
@@ -350,7 +405,9 @@ export default function AccountsScreen({ theme }) {
 
                 {/* Balance & Optional Limits */}
                 <Text style={[styles.label, { color: theme.textSecondary }]}>
-                  {accountType === "Credit Card" ? "Owed Balance" : "Opening Balance"}
+                  {accountType === "Credit Card" 
+                    ? "Owed Balance" 
+                    : (accountType.startsWith("Investment") ? "Current Price (per unit)" : "Opening Balance")}
                 </Text>
                 <TextInput
                   placeholder="0.00"
@@ -387,19 +444,49 @@ export default function AccountsScreen({ theme }) {
                       onChangeText={setBankName}
                     />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.label, { color: theme.textSecondary }]}>Last 4 Digits</Text>
-                    <TextInput
-                      placeholder="4920"
-                      placeholderTextColor="rgba(255,255,255,0.25)"
-                      maxLength={4}
-                      keyboardType="numeric"
-                      style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
-                      value={cardLast4Digits}
-                      onChangeText={setCardLast4Digits}
-                    />
-                  </View>
+                  {!(accountType.startsWith("Investment")) && (
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.label, { color: theme.textSecondary }]}>Last 4 Digits</Text>
+                      <TextInput
+                        placeholder="4920"
+                        placeholderTextColor="rgba(255,255,255,0.25)"
+                        maxLength={4}
+                        keyboardType="numeric"
+                        style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                        value={cardLast4Digits}
+                        onChangeText={setCardLast4Digits}
+                      />
+                    </View>
+                  )}
                 </View>
+
+                {/* Investment Buy Price and Quantity details */}
+                {accountType.startsWith("Investment") && (
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.label, { color: theme.textSecondary }]}>Average Buy Price</Text>
+                      <TextInput
+                        placeholder="0.00"
+                        placeholderTextColor="rgba(255,255,255,0.25)"
+                        keyboardType="numeric"
+                        style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                        value={buyPrice}
+                        onChangeText={setBuyPrice}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.label, { color: theme.textSecondary }]}>Quantity / Units</Text>
+                      <TextInput
+                        placeholder="e.g. 10"
+                        placeholderTextColor="rgba(255,255,255,0.25)"
+                        keyboardType="numeric"
+                        style={[styles.input, { color: theme.textPrimary, borderColor: theme.cardBorder, backgroundColor: "rgba(0,0,0,0.15)" }]}
+                        value={quantity}
+                        onChangeText={setQuantity}
+                      />
+                    </View>
+                  </View>
+                )}
 
                 {/* Color swatch personalization */}
                 <Text style={[styles.label, { color: theme.textSecondary }]}>Personalize Card Theme</Text>
@@ -719,6 +806,20 @@ const styles = StyleSheet.create({
   addVaultBtnText: {
     color: "#FFFFFF",
     fontSize: 11,
+    fontWeight: "800",
+  },
+  badgeContainer: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  badgeText: {
+    fontSize: 10,
     fontWeight: "800",
   }
 });

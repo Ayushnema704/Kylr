@@ -123,7 +123,7 @@ function initSpreadsheet() {
     "Users": ["UID", "Name", "Email", "Salary", "BudgetRuleEnabled", "NeedsPercentage", "WantsPercentage", "SavingsPercentage", "CreatedAt"],
     "Transactions": ["TransactionID", "UID", "Date", "Amount", "TransactionType", "Category", "Account", "Note", "BudgetType", "CreatedAt"],
     "Categories": ["CategoryID", "UID", "CategoryName", "Icon", "Color", "BudgetType", "CreatedAt"],
-    "Accounts": ["AccountID", "UID", "AccountType", "AccountName", "CurrentBalance", "CreditLimit", "BankName", "CardLast4Digits", "CreatedAt", "Color"]
+    "Accounts": ["AccountID", "UID", "AccountType", "AccountName", "CurrentBalance", "CreditLimit", "BankName", "CardLast4Digits", "CreatedAt", "Color", "BuyPrice", "Quantity"]
   };
   
   for (let sheetName in sheets) {
@@ -137,11 +137,24 @@ function initSpreadsheet() {
         .setBackground("#1a1a2e")
         .setFontColor("#ffffff");
     } else if (sheetName === "Accounts") {
-      // Auto-migrate: check if "Color" column exists
-      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      // Auto-migrate: check if columns exist
+      let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
       if (headers.indexOf("Color") === -1) {
-        const nextCol = headers.length + 1;
-        sheet.getRange(1, nextCol).setValue("Color")
+        sheet.getRange(1, headers.length + 1).setValue("Color")
+          .setFontWeight("bold")
+          .setBackground("#1a1a2e")
+          .setFontColor("#ffffff");
+        headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      }
+      if (headers.indexOf("BuyPrice") === -1) {
+        sheet.getRange(1, headers.length + 1).setValue("BuyPrice")
+          .setFontWeight("bold")
+          .setBackground("#1a1a2e")
+          .setFontColor("#ffffff");
+        headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      }
+      if (headers.indexOf("Quantity") === -1) {
+        sheet.getRange(1, headers.length + 1).setValue("Quantity")
           .setFontWeight("bold")
           .setBackground("#1a1a2e")
           .setFontColor("#ffffff");
@@ -509,6 +522,8 @@ function addAccount(uid, data) {
   const bank = data.bankName || "";
   const last4 = data.cardLast4Digits || "";
   const color = data.color || "#1E1B4B";
+  const buyPrice = parseFloat(data.buyPrice) || 0.0;
+  const quantity = parseFloat(data.quantity) || 0.0;
   
   sheet.appendRow([
     id,
@@ -520,7 +535,9 @@ function addAccount(uid, data) {
     bank,
     last4,
     new Date().toISOString(),
-    color
+    color,
+    buyPrice,
+    quantity
   ]);
   
   return { success: true, accountId: id, message: "Financial Account created successfully" };
