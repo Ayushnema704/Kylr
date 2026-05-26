@@ -35,8 +35,21 @@ export default function DashboardScreen({ theme }) {
   const [account, setAccount] = useState("");
   const [transactionType, setTransactionType] = useState("Expense");
   const [budgetType, setBudgetType] = useState("Want");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [inputCurrency, setInputCurrency] = useState("USD");
   const [submitting, setSubmitting] = useState(false);
+
+  const handleDateChange = (text) => {
+    let cleaned = text.replace(/[^0-9]/g, "");
+    let formatted = cleaned;
+    if (cleaned.length > 4) {
+      formatted = cleaned.slice(0, 4) + "-" + cleaned.slice(4);
+    }
+    if (cleaned.length > 6) {
+      formatted = formatted.slice(0, 7) + "-" + formatted.slice(7, 9);
+    }
+    setDate(formatted.slice(0, 10));
+  };
 
 
   // Sync selectors
@@ -59,6 +72,16 @@ export default function DashboardScreen({ theme }) {
       return;
     }
 
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    let transactionDate = date.trim();
+    if (transactionDate && !datePattern.test(transactionDate)) {
+      Alert.alert("Input Error", "Please provide a valid date in YYYY-MM-DD format (or leave it blank for today's date).");
+      return;
+    }
+    if (!transactionDate) {
+      transactionDate = new Date().toISOString().split("T")[0];
+    }
+
     setSubmitting(true);
     const res = await addTransaction({
       amount: parseFloat(amount),
@@ -67,7 +90,7 @@ export default function DashboardScreen({ theme }) {
       account,
       transactionType,
       budgetType,
-      date: new Date().toISOString().split("T")[0],
+      date: transactionDate,
       inputCurrency
     });
     setSubmitting(false);
@@ -337,6 +360,20 @@ export default function DashboardScreen({ theme }) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+
+        <View style={styles.formRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Transaction Date</Text>
+            <TextInput 
+              style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary }]} 
+              placeholder="YYYY-MM-DD" 
+              placeholderTextColor={theme.textSecondary}
+              value={date}
+              onChangeText={handleDateChange}
+              maxLength={10}
+            />
           </View>
         </View>
 

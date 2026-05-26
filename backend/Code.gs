@@ -189,7 +189,15 @@ function getSheetRows(sheetName, uidFilter = null) {
     
     const obj = {};
     for (let j = 0; j < headers.length; j++) {
-      obj[headers[j]] = row[j];
+      let val = row[j];
+      if (val instanceof Date) {
+        if (headers[j] === "Date") {
+          val = Utilities.formatDate(val, ss.getSpreadsheetTimeZone(), "yyyy-MM-dd");
+        } else {
+          val = Utilities.formatDate(val, "UTC", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+        }
+      }
+      obj[headers[j]] = val;
     }
     obj.rowIndex = i + 2; // Keep track of physical row index (1-based, accounts for headers)
     list.push(obj);

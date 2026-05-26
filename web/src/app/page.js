@@ -51,26 +51,28 @@ export default function Dashboard() {
   // Core Add Transaction form states
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [category, setCategory] = useState("Dining Out");
-  const [account, setAccount] = useState("HDFC Savings");
+  const [category, setCategory] = useState("");
+  const [account, setAccount] = useState("");
   const [transactionType, setTransactionType] = useState("Expense");
   const [budgetType, setBudgetType] = useState("Want");
   const [date, setDate] = useState("");
-  const [inputCurrency, setInputCurrency] = useState("USD");
+  const [inputCurrency, setInputCurrency] = useState("");
 
-  // Sync date input
+  // Sync date input and form defaults safely without resetting user selections
   useEffect(() => {
-    setDate(new Date().toISOString().split("T")[0]);
-    if (categories.length > 0) {
+    if (!date) {
+      setDate(new Date().toISOString().split("T")[0]);
+    }
+    if (categories.length > 0 && !category) {
       setCategory(categories[0].CategoryName);
     }
-    if (accounts.length > 0) {
+    if (accounts.length > 0 && !account) {
       setAccount(accounts[0].AccountName);
     }
-    if (user?.currency) {
+    if (user?.currency && !inputCurrency) {
       setInputCurrency(user.currency);
     }
-  }, [categories, accounts, user?.currency]);
+  }, [categories, accounts, user?.currency, date, category, account, inputCurrency]);
 
   // Add standard transaction
   const handleSubmit = async (e) => {
