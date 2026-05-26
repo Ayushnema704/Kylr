@@ -33,6 +33,7 @@ export default function DashboardScreen({ theme }) {
   const [note, setNote] = useState("");
   const [category, setCategory] = useState("");
   const [account, setAccount] = useState("");
+  const [destinationAccount, setDestinationAccount] = useState("");
   const [transactionType, setTransactionType] = useState("Expense");
   const [budgetType, setBudgetType] = useState("Want");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -60,10 +61,23 @@ export default function DashboardScreen({ theme }) {
     if (accounts.length > 0 && !account) {
       setAccount(accounts[0].AccountName);
     }
+    if (accounts.length > 1 && !destinationAccount) {
+      setDestinationAccount(accounts[1].AccountName);
+    }
     if (user?.currency && !inputCurrency) {
       setInputCurrency(user.currency);
     }
   }, [categories, accounts, user?.currency]);
+
+  // Prevent transferring to the exact same account
+  useEffect(() => {
+    if (account && destinationAccount && account === destinationAccount && accounts.length > 1) {
+      const alt = accounts.find(acc => acc.AccountName !== account);
+      if (alt) {
+        setDestinationAccount(alt.AccountName);
+      }
+    }
+  }, [account, destinationAccount, accounts]);
 
   // Submit standard transaction
   const handleAddTransaction = async () => {
@@ -87,10 +101,11 @@ export default function DashboardScreen({ theme }) {
       const res = await addTransaction({
         amount: parseFloat(amount),
         note: note || "Manual Log",
-        category,
+        category: transactionType === "Transfer" ? "Transfer" : category,
         account,
+        destinationAccount: transactionType === "Transfer" ? destinationAccount : "",
         transactionType,
-        budgetType,
+        budgetType: transactionType === "Transfer" ? "Savings" : budgetType,
         date: transactionDate,
         inputCurrency
       });
@@ -105,6 +120,9 @@ export default function DashboardScreen({ theme }) {
         }
         if (accounts.length > 0) {
           setAccount(accounts[0].AccountName);
+        }
+        if (accounts.length > 1) {
+          setDestinationAccount(accounts[1].AccountName);
         }
         setTransactionType("Expense");
         setDate(new Date().toISOString().split("T")[0]);
@@ -339,7 +357,7 @@ export default function DashboardScreen({ theme }) {
           <View style={{ flex: 1 }}>
             <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Flow Type</Text>
             <View style={styles.selectorRow}>
-              {["Expense", "Income"].map(t => (
+              {["Expense", "Income", "Transfer"].map(t => (
                 <TouchableOpacity 
                   key={t} 
                   style={[styles.flowPill, { backgroundColor: transactionType === t ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
@@ -355,25 +373,9 @@ export default function DashboardScreen({ theme }) {
 
         <View style={styles.formRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
-              {categories.map(cat => (
-                <TouchableOpacity 
-                  key={cat.CategoryID} 
-                  style={[styles.catPill, { backgroundColor: category === cat.CategoryName ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
-                  onPress={() => handleCategorySelect(cat.CategoryName)}
-                  disabled={submitting}
-                >
-                  <Text style={[styles.catPillText, { color: category === cat.CategoryName ? "#FFFFFF" : theme.textPrimary }]}>{cat.CategoryName}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-
-        <View style={styles.formRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Funding Account</Text>
+            <Text style={[styles.formLabel, { color: theme.textSecondary }]}>
+              {transactionType === "Transfer" ? "Source Account" : "Funding Account"}
+            </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
               {accounts.map(acc => (
                 <TouchableOpacity 
@@ -388,6 +390,44 @@ export default function DashboardScreen({ theme }) {
             </ScrollView>
           </View>
         </View>
+
+        {transactionType === "Transfer" ? (
+          <View style={styles.formRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Destination Account</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+                {accounts.filter(acc => acc.AccountName !== account).map(acc => (
+                  <TouchableOpacity 
+                    key={acc.AccountID} 
+                    style={[styles.catPill, { backgroundColor: destinationAccount === acc.AccountName ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
+                    onPress={() => setDestinationAccount(acc.AccountName)}
+                    disabled={submitting}
+                  >
+                    <Text style={[styles.catPillText, { color: destinationAccount === acc.AccountName ? "#FFFFFF" : theme.textPrimary }]}>{acc.AccountName}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.formRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Category</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorRow}>
+                {categories.map(cat => (
+                  <TouchableOpacity 
+                    key={cat.CategoryID} 
+                    style={[styles.catPill, { backgroundColor: category === cat.CategoryName ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
+                    onPress={() => handleCategorySelect(cat.CategoryName)}
+                    disabled={submitting}
+                  >
+                    <Text style={[styles.catPillText, { color: category === cat.CategoryName ? "#FFFFFF" : theme.textPrimary }]}>{cat.CategoryName}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        )}
 
         <View style={styles.formRow}>
           <View style={{ flex: 1 }}>
@@ -404,31 +444,35 @@ export default function DashboardScreen({ theme }) {
           </View>
         </View>
 
-        {/* Budget Allocation pills */}
-        <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 10 }]}>Budget Tag Allocation</Text>
-        <View style={styles.budgetGrid}>
-          {[
-            { label: "Needs", value: "Need", color: theme.accentEmerald, bg: "rgba(16, 185, 129, 0.12)" },
-            { label: "Wants", value: "Want", color: theme.accentCyan, bg: "rgba(6, 182, 212, 0.12)" },
-            { label: "Savings", value: "Savings", color: theme.accentPurple, bg: "rgba(139, 92, 246, 0.12)" }
-          ].map(tag => (
-            <TouchableOpacity 
-              key={tag.value} 
-              style={[
-                styles.budgetPill, 
-                { 
-                  backgroundColor: budgetType === tag.value ? tag.bg : theme.cardBorder,
-                  borderColor: budgetType === tag.value ? tag.color : "transparent",
-                  opacity: submitting ? 0.6 : 1
-                }
-              ]}
-              onPress={() => setBudgetType(tag.value)}
-              disabled={submitting}
-            >
-              <Text style={[styles.budgetPillText, { color: budgetType === tag.value ? tag.color : theme.textSecondary }]}>{tag.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {transactionType !== "Transfer" && (
+          <>
+            {/* Budget Allocation pills */}
+            <Text style={[styles.formLabel, { color: theme.textSecondary, marginTop: 10 }]}>Budget Tag Allocation</Text>
+            <View style={styles.budgetGrid}>
+              {[
+                { label: "Needs", value: "Need", color: theme.accentEmerald, bg: "rgba(16, 185, 129, 0.12)" },
+                { label: "Wants", value: "Want", color: theme.accentCyan, bg: "rgba(6, 182, 212, 0.12)" },
+                { label: "Savings", value: "Savings", color: theme.accentPurple, bg: "rgba(139, 92, 246, 0.12)" }
+              ].map(tag => (
+                <TouchableOpacity 
+                  key={tag.value} 
+                  style={[
+                    styles.budgetPill, 
+                    { 
+                      backgroundColor: budgetType === tag.value ? tag.bg : theme.cardBorder,
+                      borderColor: budgetType === tag.value ? tag.color : "transparent",
+                      opacity: submitting ? 0.6 : 1
+                    }
+                  ]}
+                  onPress={() => setBudgetType(tag.value)}
+                  disabled={submitting}
+                >
+                  <Text style={[styles.budgetPillText, { color: budgetType === tag.value ? tag.color : theme.textSecondary }]}>{tag.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* Submit */}
         <TouchableOpacity 

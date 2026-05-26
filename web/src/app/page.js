@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [note, setNote] = useState("");
   const [category, setCategory] = useState("");
   const [account, setAccount] = useState("");
+  const [destinationAccount, setDestinationAccount] = useState("");
   const [transactionType, setTransactionType] = useState("Expense");
   const [budgetType, setBudgetType] = useState("Want");
   const [date, setDate] = useState("");
@@ -70,10 +71,23 @@ export default function Dashboard() {
     if (accounts.length > 0 && !account) {
       setAccount(accounts[0].AccountName);
     }
+    if (accounts.length > 1 && !destinationAccount) {
+      setDestinationAccount(accounts[1].AccountName);
+    }
     if (user?.currency && !inputCurrency) {
       setInputCurrency(user.currency);
     }
-  }, [categories, accounts, user?.currency, date, category, account, inputCurrency]);
+  }, [categories, accounts, user?.currency, date, category, account, destinationAccount, inputCurrency]);
+
+  // Prevent transferring to the exact same account
+  useEffect(() => {
+    if (account && destinationAccount && account === destinationAccount && accounts.length > 1) {
+      const alt = accounts.find(acc => acc.AccountName !== account);
+      if (alt) {
+        setDestinationAccount(alt.AccountName);
+      }
+    }
+  }, [account, destinationAccount, accounts]);
 
   // Add standard transaction
   const handleSubmit = async (e) => {
@@ -85,10 +99,11 @@ export default function Dashboard() {
       const res = await addTransaction({
         amount: parseFloat(amount),
         note: note || "Transaction",
-        category,
+        category: transactionType === "Transfer" ? "Transfer" : category,
         account,
+        destinationAccount: transactionType === "Transfer" ? destinationAccount : "",
         transactionType,
-        budgetType,
+        budgetType: transactionType === "Transfer" ? "Savings" : budgetType,
         date,
         inputCurrency
       });
@@ -103,6 +118,9 @@ export default function Dashboard() {
         }
         if (accounts.length > 0) {
           setAccount(accounts[0].AccountName);
+        }
+        if (accounts.length > 1) {
+          setDestinationAccount(accounts[1].AccountName);
         }
         setTransactionType("Expense");
         setDate(new Date().toISOString().split("T")[0]);
@@ -371,12 +389,15 @@ export default function Dashboard() {
                 >
                   <option value="Expense">Expense</option>
                   <option value="Income">Income</option>
+                  <option value="Transfer">Transfer</option>
                 </select>
               </div>
 
               {/* Account selection */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Funding Source</label>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                  {transactionType === "Transfer" ? "Source Account" : "Funding Source"}
+                </label>
                 <select 
                   className="glass-select"
                   value={account}
@@ -390,109 +411,143 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {/* Category */}
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Category</label>
-                <select 
-                  className="glass-select"
-                  value={category}
-                  onChange={(e) => handleCategoryChange(e.target.value)}
-                  disabled={submitting}
-                >
-                  {categories.map(cat => (
-                    <option key={cat.CategoryID} value={cat.CategoryName}>{cat.CategoryName}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Conditional selectors depending on Flow Type */}
+            {transactionType === "Transfer" ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                {/* Destination Account */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Destination Account</label>
+                  <select
+                    className="glass-select"
+                    value={destinationAccount}
+                    onChange={(e) => setDestinationAccount(e.target.value)}
+                    disabled={submitting}
+                  >
+                    {accounts.filter(acc => acc.AccountName !== account).map(acc => (
+                      <option key={acc.AccountID} value={acc.AccountName}>{acc.AccountName}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Date */}
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
-                <input 
-                  type="date" 
-                  className="glass-input" 
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  disabled={submitting}
-                />
+                {/* Date */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
+                  <input 
+                    type="date" 
+                    className="glass-input" 
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    disabled={submitting}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  {/* Category */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Category</label>
+                    <select 
+                      className="glass-select"
+                      value={category}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
+                      disabled={submitting}
+                    >
+                      {categories.map(cat => (
+                        <option key={cat.CategoryID} value={cat.CategoryName}>{cat.CategoryName}</option>
+                      ))}
+                    </select>
+                  </div>
 
-            {/* Interactive Budget Tag selector */}
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                Budget Tag Allocation
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-                <button
-                  type="button"
-                  onClick={() => setBudgetType("Need")}
-                  disabled={submitting}
-                  style={{
-                    padding: "10px",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    opacity: submitting ? 0.6 : 1,
-                    background: budgetType === "Need" ? "rgba(16, 185, 129, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                    border: budgetType === "Need" ? "1px solid var(--neon-emerald)" : "1px solid rgba(255,255,255,0.06)",
-                    color: budgetType === "Need" ? "var(--neon-emerald)" : "var(--text-secondary)",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    fontSize: "0.8rem",
-                    transition: "all 0.2s ease"
-                  }}
-                >
-                  Needs
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBudgetType("Want")}
-                  disabled={submitting}
-                  style={{
-                    padding: "10px",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    opacity: submitting ? 0.6 : 1,
-                    background: budgetType === "Want" ? "rgba(6, 182, 212, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                    border: budgetType === "Want" ? "1px solid var(--neon-cyan)" : "1px solid rgba(255,255,255,0.06)",
-                    color: budgetType === "Want" ? "var(--neon-cyan)" : "var(--text-secondary)",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    fontSize: "0.8rem",
-                    transition: "all 0.2s ease"
-                  }}
-                >
-                  Wants
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBudgetType("Savings")}
-                  disabled={submitting}
-                  style={{
-                    padding: "10px",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    cursor: submitting ? "not-allowed" : "pointer",
-                    opacity: submitting ? 0.6 : 1,
-                    background: budgetType === "Savings" ? "rgba(139, 92, 246, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                    border: budgetType === "Savings" ? "1px solid var(--neon-purple)" : "1px solid rgba(255,255,255,0.06)",
-                    color: budgetType === "Savings" ? "var(--neon-purple)" : "var(--text-secondary)",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    fontSize: "0.8rem",
-                    transition: "all 0.2s ease"
-                  }}
-                >
-                  Savings
-                </button>
-              </div>
-            </div>
+                  {/* Date */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
+                    <input 
+                      type="date" 
+                      className="glass-input" 
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                {/* Interactive Budget Tag selector */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                    Budget Tag Allocation
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setBudgetType("Need")}
+                      disabled={submitting}
+                      style={{
+                        padding: "10px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        cursor: submitting ? "not-allowed" : "pointer",
+                        opacity: submitting ? 0.6 : 1,
+                        background: budgetType === "Need" ? "rgba(16, 185, 129, 0.12)" : "rgba(255, 255, 255, 0.02)",
+                        border: budgetType === "Need" ? "1px solid var(--neon-emerald)" : "1px solid rgba(255,255,255,0.06)",
+                        color: budgetType === "Need" ? "var(--neon-emerald)" : "var(--text-secondary)",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.8rem",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      Needs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBudgetType("Want")}
+                      disabled={submitting}
+                      style={{
+                        padding: "10px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        cursor: submitting ? "not-allowed" : "pointer",
+                        opacity: submitting ? 0.6 : 1,
+                        background: budgetType === "Want" ? "rgba(6, 182, 212, 0.12)" : "rgba(255, 255, 255, 0.02)",
+                        border: budgetType === "Want" ? "1px solid var(--neon-cyan)" : "1px solid rgba(255,255,255,0.06)",
+                        color: budgetType === "Want" ? "var(--neon-cyan)" : "var(--text-secondary)",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.8rem",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      Wants
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBudgetType("Savings")}
+                      disabled={submitting}
+                      style={{
+                        padding: "10px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        cursor: submitting ? "not-allowed" : "pointer",
+                        opacity: submitting ? 0.6 : 1,
+                        background: budgetType === "Savings" ? "rgba(139, 92, 246, 0.12)" : "rgba(255, 255, 255, 0.02)",
+                        border: budgetType === "Savings" ? "1px solid var(--neon-purple)" : "1px solid rgba(255,255,255,0.06)",
+                        color: budgetType === "Savings" ? "var(--neon-purple)" : "var(--text-secondary)",
+                        borderRadius: "8px",
+                        fontWeight: 600,
+                        fontSize: "0.8rem",
+                        transition: "all 0.2s ease"
+                      }}
+                    >
+                      Savings
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
 
             <button 
               type="submit" 

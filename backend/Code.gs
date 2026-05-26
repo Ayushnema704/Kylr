@@ -334,11 +334,66 @@ function addTransaction(uid, data) {
   const id = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
   const date = data.date || new Date().toISOString().split('T')[0];
   const amount = parseFloat(data.amount) || 0;
-  const type = data.transactionType || "Expense"; // Income / Expense
+  const type = data.transactionType || "Expense"; // Income / Expense / Transfer
   const category = data.category || "Uncategorized";
   const account = data.account || "Cash";
   const note = data.note || "";
   const budgetType = data.budgetType || "Want"; // Need / Want / Savings
+
+  if (type === "Transfer") {
+    const destAccount = data.destinationAccount;
+    const sourceAccount = account;
+    
+    // 1. Create Transfer Out record
+    const outId = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
+    let outSheetName = "Transactions";
+    try {
+      const parts = date.split('-');
+      if (parts.length >= 2) {
+        outSheetName = "Transactions_" + parts[0] + "-" + parts[1];
+      }
+    } catch (err) {}
+    const outSheet = getOrCreateMonthlySheet(ss, outSheetName);
+    outSheet.appendRow([
+      outId,
+      uid,
+      date,
+      amount,
+      "Transfer Out",
+      "Transfer",
+      sourceAccount,
+      note ? `${note} (Transfer to ${destAccount})` : `Transfer to ${destAccount}`,
+      "Savings",
+      new Date().toISOString()
+    ]);
+    adjustAccountBalance(uid, sourceAccount, amount, "Transfer Out");
+    
+    // 2. Create Transfer In record
+    const inId = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
+    let inSheetName = "Transactions";
+    try {
+      const parts = date.split('-');
+      if (parts.length >= 2) {
+        inSheetName = "Transactions_" + parts[0] + "-" + parts[1];
+      }
+    } catch (err) {}
+    const inSheet = getOrCreateMonthlySheet(ss, inSheetName);
+    inSheet.appendRow([
+      inId,
+      uid,
+      date,
+      amount,
+      "Transfer In",
+      "Transfer",
+      destAccount,
+      note ? `${note} (Transfer from ${sourceAccount})` : `Transfer from ${sourceAccount}`,
+      "Savings",
+      new Date().toISOString()
+    ]);
+    adjustAccountBalance(uid, destAccount, amount, "Transfer In");
+    
+    return { success: true, transactionId: outId, message: "Self Transfer completed successfully" };
+  }
 
   // Parse YYYY-MM from transaction date to create a new monthly sheet if not exists
   let sheetName = "Transactions";
@@ -575,7 +630,7 @@ function adjustAccountBalance(uid, accountName, amount, txnType) {
   
   const target = accounts.find(a => String(a.AccountName).trim().toLowerCase() === String(accountName).trim().toLowerCase());
   if (target) {
-    const change = txnType === "Income" ? amount : -amount;
+    const change = (txnType === "Income" || txnType === "Transfer In") ? amount : -amount;
     const newBal = parseFloat(target.CurrentBalance) + change;
     sheet.getRange(target.rowIndex, 5).setValue(newBal); // Balance is column E (5th column)
   }
@@ -608,7 +663,7 @@ function getAnalytics(uid) {
     
     if (type === "Income") {
       totalIncome += amt;
-    } else {
+    } else if (type === "Expense") {
       totalExpense += amt;
       
       // 50-30-20 split tracking

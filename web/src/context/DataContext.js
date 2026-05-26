@@ -131,7 +131,7 @@ export function DataProvider({ children }) {
       const amt = parseFloat(t.Amount) || 0;
       if (t.TransactionType === "Income") {
         totalIncome += amt;
-      } else {
+      } else if (t.TransactionType === "Expense") {
         totalExpense += amt;
         if (t.BudgetType === "Need") needSpend += amt;
         else if (t.BudgetType === "Want") wantSpend += amt;
@@ -408,6 +408,55 @@ export function DataProvider({ children }) {
     }
 
     if (isSandbox) {
+      if (data.transactionType === "Transfer") {
+        const sourceAccount = data.account;
+        const destAccount = data.destinationAccount;
+        
+        const outTxn = {
+          TransactionID: "TX_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+          Date: data.date || new Date().toISOString().split("T")[0],
+          Amount: finalAmount,
+          TransactionType: "Transfer Out",
+          Category: "Transfer",
+          Account: sourceAccount,
+          Note: finalNote ? `${finalNote} (Transfer to ${destAccount})` : `Transfer to ${destAccount}`,
+          BudgetType: "Savings",
+          CreatedAt: new Date().toISOString()
+        };
+        
+        const inTxn = {
+          TransactionID: "TX_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+          Date: data.date || new Date().toISOString().split("T")[0],
+          Amount: finalAmount,
+          TransactionType: "Transfer In",
+          Category: "Transfer",
+          Account: destAccount,
+          Note: finalNote ? `${finalNote} (Transfer from ${sourceAccount})` : `Transfer from ${sourceAccount}`,
+          BudgetType: "Savings",
+          CreatedAt: new Date().toISOString()
+        };
+        
+        const updatedTxns = [outTxn, inTxn, ...transactions];
+        setTransactions(updatedTxns);
+        localStorage.setItem("kylr_txns", JSON.stringify(updatedTxns));
+        
+        // Adjust both target accounts atomically
+        const updatedAccs = accounts.map(a => {
+          if (a.AccountName === sourceAccount) {
+            return { ...a, CurrentBalance: a.CurrentBalance - finalAmount };
+          }
+          if (a.AccountName === destAccount) {
+            return { ...a, CurrentBalance: a.CurrentBalance + finalAmount };
+          }
+          return a;
+        });
+        setAccounts(updatedAccs);
+        localStorage.setItem("kylr_accounts", JSON.stringify(updatedAccs));
+        
+        recalculateSandboxAnalytics(updatedTxns, updatedAccs);
+        return { success: true };
+      }
+
       const newTxn = {
         TransactionID: "TX_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
         Date: data.date || new Date().toISOString().split("T")[0],
@@ -447,6 +496,7 @@ export function DataProvider({ children }) {
           transactionType: data.transactionType,
           category: data.category,
           account: data.account,
+          destinationAccount: data.destinationAccount,
           note: finalNote,
           budgetType: data.budgetType,
           date: data.date
