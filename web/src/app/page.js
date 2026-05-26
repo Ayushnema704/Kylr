@@ -57,6 +57,7 @@ export default function Dashboard() {
   const [budgetType, setBudgetType] = useState("Want");
   const [date, setDate] = useState("");
   const [inputCurrency, setInputCurrency] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   // Sync date input and form defaults safely without resetting user selections
   useEffect(() => {
@@ -77,22 +78,42 @@ export default function Dashboard() {
   // Add standard transaction
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!amount || isNaN(parseFloat(amount))) return;
+    if (!amount || isNaN(parseFloat(amount)) || submitting) return;
 
-    const res = await addTransaction({
-      amount: parseFloat(amount),
-      note: note || "Transaction",
-      category,
-      account,
-      transactionType,
-      budgetType,
-      date,
-      inputCurrency
-    });
+    setSubmitting(true);
+    try {
+      const res = await addTransaction({
+        amount: parseFloat(amount),
+        note: note || "Transaction",
+        category,
+        account,
+        transactionType,
+        budgetType,
+        date,
+        inputCurrency
+      });
 
-    if (res.success) {
-      setAmount("");
-      setNote("");
+      if (res.success) {
+        setAmount("");
+        setNote("");
+        // Reset selectors and allocations back to their correct defaults *after* successful sync
+        if (categories.length > 0) {
+          setCategory(categories[0].CategoryName);
+          setBudgetType(categories[0].BudgetType);
+        }
+        if (accounts.length > 0) {
+          setAccount(accounts[0].AccountName);
+        }
+        setTransactionType("Expense");
+        setDate(new Date().toISOString().split("T")[0]);
+        if (user?.currency) {
+          setInputCurrency(user.currency);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to add transaction:", err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -286,6 +307,7 @@ export default function Dashboard() {
                   onChange={(e) => setAmount(e.target.value)}
                   className="glass-input" 
                   required
+                  disabled={submitting}
                 />
               </div>
               <div>
@@ -294,6 +316,7 @@ export default function Dashboard() {
                   className="glass-select"
                   value={inputCurrency}
                   onChange={(e) => setInputCurrency(e.target.value)}
+                  disabled={submitting}
                 >
                   {Object.keys(CURRENCY_MAP).map(code => (
                     <option key={code} value={code}>{code}</option>
@@ -331,6 +354,7 @@ export default function Dashboard() {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 className="glass-input" 
+                disabled={submitting}
               />
             </div>
 
@@ -343,6 +367,7 @@ export default function Dashboard() {
                   className="glass-select"
                   value={transactionType}
                   onChange={(e) => setTransactionType(e.target.value)}
+                  disabled={submitting}
                 >
                   <option value="Expense">Expense</option>
                   <option value="Income">Income</option>
@@ -356,6 +381,7 @@ export default function Dashboard() {
                   className="glass-select"
                   value={account}
                   onChange={(e) => setAccount(e.target.value)}
+                  disabled={submitting}
                 >
                   {accounts.map(acc => (
                     <option key={acc.AccountID} value={acc.AccountName}>{acc.AccountName}</option>
@@ -372,6 +398,7 @@ export default function Dashboard() {
                   className="glass-select"
                   value={category}
                   onChange={(e) => handleCategoryChange(e.target.value)}
+                  disabled={submitting}
                 >
                   {categories.map(cat => (
                     <option key={cat.CategoryID} value={cat.CategoryName}>{cat.CategoryName}</option>
@@ -387,6 +414,7 @@ export default function Dashboard() {
                   className="glass-input" 
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
+                  disabled={submitting}
                 />
               </div>
             </div>
@@ -400,12 +428,14 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setBudgetType("Need")}
+                  disabled={submitting}
                   style={{
                     padding: "10px",
                     display: "flex",
                     justifyContent: "center",
                     alignItems: "center",
-                    cursor: "pointer",
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    opacity: submitting ? 0.6 : 1,
                     background: budgetType === "Need" ? "rgba(16, 185, 129, 0.12)" : "rgba(255, 255, 255, 0.02)",
                     border: budgetType === "Need" ? "1px solid var(--neon-emerald)" : "1px solid rgba(255,255,255,0.06)",
                     color: budgetType === "Need" ? "var(--neon-emerald)" : "var(--text-secondary)",
@@ -420,12 +450,14 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setBudgetType("Want")}
+                  disabled={submitting}
                   style={{
                     padding: "10px",
                     display: "flex",
                     justifyContent: "center",
                     alignItems: "center",
-                    cursor: "pointer",
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    opacity: submitting ? 0.6 : 1,
                     background: budgetType === "Want" ? "rgba(6, 182, 212, 0.12)" : "rgba(255, 255, 255, 0.02)",
                     border: budgetType === "Want" ? "1px solid var(--neon-cyan)" : "1px solid rgba(255,255,255,0.06)",
                     color: budgetType === "Want" ? "var(--neon-cyan)" : "var(--text-secondary)",
@@ -440,12 +472,14 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setBudgetType("Savings")}
+                  disabled={submitting}
                   style={{
                     padding: "10px",
                     display: "flex",
                     justifyContent: "center",
                     alignItems: "center",
-                    cursor: "pointer",
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    opacity: submitting ? 0.6 : 1,
                     background: budgetType === "Savings" ? "rgba(139, 92, 246, 0.12)" : "rgba(255, 255, 255, 0.02)",
                     border: budgetType === "Savings" ? "1px solid var(--neon-purple)" : "1px solid rgba(255,255,255,0.06)",
                     color: budgetType === "Savings" ? "var(--neon-purple)" : "var(--text-secondary)",
@@ -460,8 +494,19 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <button type="submit" className="glass-button" style={{ width: "100%" }}>
-              <Plus size={16} /> Add Transaction Record
+            <button 
+              type="submit" 
+              className="glass-button" 
+              style={{ width: "100%", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <span>🔄 Syncing transaction...</span>
+              ) : (
+                <>
+                  <Plus size={16} /> Add Transaction Record
+                </>
+              )}
             </button>
           </form>
         </div>

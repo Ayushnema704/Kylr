@@ -67,7 +67,7 @@ export default function DashboardScreen({ theme }) {
 
   // Submit standard transaction
   const handleAddTransaction = async () => {
-    if (!amount || isNaN(parseFloat(amount))) {
+    if (!amount || isNaN(parseFloat(amount)) || submitting) {
       Alert.alert("Input Error", "Please provide a valid transaction amount.");
       return;
     }
@@ -83,24 +83,43 @@ export default function DashboardScreen({ theme }) {
     }
 
     setSubmitting(true);
-    const res = await addTransaction({
-      amount: parseFloat(amount),
-      note: note || "Manual Log",
-      category,
-      account,
-      transactionType,
-      budgetType,
-      date: transactionDate,
-      inputCurrency
-    });
-    setSubmitting(false);
+    try {
+      const res = await addTransaction({
+        amount: parseFloat(amount),
+        note: note || "Manual Log",
+        category,
+        account,
+        transactionType,
+        budgetType,
+        date: transactionDate,
+        inputCurrency
+      });
 
-    if (res.success) {
-      setAmount("");
-      setNote("");
-      Alert.alert("Success", "Transaction successfully logged!");
-    } else {
-      Alert.alert("Error", "Could not record transaction. Verify your settings.");
+      if (res.success) {
+        setAmount("");
+        setNote("");
+        // Reset selectors and allocations back to their correct defaults after syncing is completed
+        if (categories.length > 0) {
+          setCategory(categories[0].CategoryName);
+          setBudgetType(categories[0].BudgetType);
+        }
+        if (accounts.length > 0) {
+          setAccount(accounts[0].AccountName);
+        }
+        setTransactionType("Expense");
+        setDate(new Date().toISOString().split("T")[0]);
+        if (user?.currency) {
+          setInputCurrency(user.currency);
+        }
+        Alert.alert("Success", "Transaction successfully logged!");
+      } else {
+        Alert.alert("Error", "Could not record transaction. Verify your settings.");
+      }
+    } catch (err) {
+      console.error("Add transaction mobile error: ", err);
+      Alert.alert("Error", "An unexpected error occurred.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -261,12 +280,13 @@ export default function DashboardScreen({ theme }) {
           <View style={{ flex: 2 }}>
             <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Amount</Text>
             <TextInput 
-              style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary }]} 
+              style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary, opacity: submitting ? 0.7 : 1 }]} 
               placeholder="0.00" 
               placeholderTextColor={theme.textSecondary}
               keyboardType="numeric"
               value={amount}
               onChangeText={setAmount}
+              editable={!submitting}
             />
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
@@ -278,10 +298,12 @@ export default function DashboardScreen({ theme }) {
                   style={[
                     styles.currencyPill, 
                     { 
-                      backgroundColor: inputCurrency === code ? theme.accentPurple : theme.cardBorder 
+                      backgroundColor: inputCurrency === code ? theme.accentPurple : theme.cardBorder,
+                      opacity: submitting ? 0.6 : 1
                     }
                   ]}
                   onPress={() => setInputCurrency(code)}
+                  disabled={submitting}
                 >
                   <Text style={[styles.currencyPillText, { color: inputCurrency === code ? "#FFFFFF" : theme.textPrimary }]}>{code}</Text>
                 </TouchableOpacity>
@@ -303,11 +325,12 @@ export default function DashboardScreen({ theme }) {
         <View style={styles.formGroup}>
           <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Description</Text>
           <TextInput 
-            style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary }]} 
+            style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary, opacity: submitting ? 0.7 : 1 }]} 
             placeholder="e.g. Nvidia Stock SIP" 
             placeholderTextColor={theme.textSecondary}
             value={note}
             onChangeText={setNote}
+            editable={!submitting}
           />
         </View>
 
@@ -319,8 +342,9 @@ export default function DashboardScreen({ theme }) {
               {["Expense", "Income"].map(t => (
                 <TouchableOpacity 
                   key={t} 
-                  style={[styles.flowPill, { backgroundColor: transactionType === t ? theme.accentPurple : theme.cardBorder }]}
+                  style={[styles.flowPill, { backgroundColor: transactionType === t ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
                   onPress={() => setTransactionType(t)}
+                  disabled={submitting}
                 >
                   <Text style={[styles.flowPillText, { color: transactionType === t ? "#FFFFFF" : theme.textPrimary }]}>{t}</Text>
                 </TouchableOpacity>
@@ -336,8 +360,9 @@ export default function DashboardScreen({ theme }) {
               {categories.map(cat => (
                 <TouchableOpacity 
                   key={cat.CategoryID} 
-                  style={[styles.catPill, { backgroundColor: category === cat.CategoryName ? theme.accentPurple : theme.cardBorder }]}
+                  style={[styles.catPill, { backgroundColor: category === cat.CategoryName ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
                   onPress={() => handleCategorySelect(cat.CategoryName)}
+                  disabled={submitting}
                 >
                   <Text style={[styles.catPillText, { color: category === cat.CategoryName ? "#FFFFFF" : theme.textPrimary }]}>{cat.CategoryName}</Text>
                 </TouchableOpacity>
@@ -353,8 +378,9 @@ export default function DashboardScreen({ theme }) {
               {accounts.map(acc => (
                 <TouchableOpacity 
                   key={acc.AccountID} 
-                  style={[styles.catPill, { backgroundColor: account === acc.AccountName ? theme.accentPurple : theme.cardBorder }]}
+                  style={[styles.catPill, { backgroundColor: account === acc.AccountName ? theme.accentPurple : theme.cardBorder, opacity: submitting ? 0.6 : 1 }]}
                   onPress={() => setAccount(acc.AccountName)}
+                  disabled={submitting}
                 >
                   <Text style={[styles.catPillText, { color: account === acc.AccountName ? "#FFFFFF" : theme.textPrimary }]}>{acc.AccountName}</Text>
                 </TouchableOpacity>
@@ -367,12 +393,13 @@ export default function DashboardScreen({ theme }) {
           <View style={{ flex: 1 }}>
             <Text style={[styles.formLabel, { color: theme.textSecondary }]}>Transaction Date</Text>
             <TextInput 
-              style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary }]} 
+              style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary, opacity: submitting ? 0.7 : 1 }]} 
               placeholder="YYYY-MM-DD" 
               placeholderTextColor={theme.textSecondary}
               value={date}
               onChangeText={handleDateChange}
               maxLength={10}
+              editable={!submitting}
             />
           </View>
         </View>
@@ -391,10 +418,12 @@ export default function DashboardScreen({ theme }) {
                 styles.budgetPill, 
                 { 
                   backgroundColor: budgetType === tag.value ? tag.bg : theme.cardBorder,
-                  borderColor: budgetType === tag.value ? tag.color : "transparent"
+                  borderColor: budgetType === tag.value ? tag.color : "transparent",
+                  opacity: submitting ? 0.6 : 1
                 }
               ]}
               onPress={() => setBudgetType(tag.value)}
+              disabled={submitting}
             >
               <Text style={[styles.budgetPillText, { color: budgetType === tag.value ? tag.color : theme.textSecondary }]}>{tag.label}</Text>
             </TouchableOpacity>
@@ -402,7 +431,11 @@ export default function DashboardScreen({ theme }) {
         </View>
 
         {/* Submit */}
-        <TouchableOpacity style={[styles.submitButton, { backgroundColor: theme.accentPurple }]} onPress={handleAddTransaction}>
+        <TouchableOpacity 
+          style={[styles.submitButton, { backgroundColor: theme.accentPurple, opacity: submitting ? 0.7 : 1 }]} 
+          onPress={handleAddTransaction}
+          disabled={submitting}
+        >
           {submitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
