@@ -45,6 +45,7 @@ export default function DashboardScreen({ theme }) {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [selectedAccount, setSelectedAccount] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleDateChange = (text) => {
     let cleaned = text.replace(/[^0-9]/g, "");
@@ -188,7 +189,14 @@ export default function DashboardScreen({ theme }) {
 
     // Apply account filter
     if (selectedAccount !== "All") {
-      return txn.Account === selectedAccount;
+      if (txn.Account !== selectedAccount) return false;
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim() !== "") {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = txn.Note ? txn.Note.toLowerCase().includes(query) : false;
+      if (!matchesSearch) return false;
     }
 
     return true;
@@ -741,6 +749,27 @@ export default function DashboardScreen({ theme }) {
           Showing {filteredTransactions.length} of {transactions.length}
         </Text>
       </View>
+
+      <TextInput
+        style={[
+          styles.input,
+          {
+            backgroundColor: theme.cardBg,
+            borderColor: theme.cardBorder,
+            borderWidth: 1,
+            color: theme.textPrimary,
+            marginBottom: 12,
+            height: 38,
+            fontSize: 12,
+            paddingHorizontal: 12,
+            borderRadius: 8
+          }
+        ]}
+        placeholder="🔍 Search by transaction title..."
+        placeholderTextColor={theme.textSecondary}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
       <View style={[styles.glassCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
         {transactions.length === 0 ? (
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No ledger logs recorded. Add some expenses above!</Text>

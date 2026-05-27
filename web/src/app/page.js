@@ -95,6 +95,7 @@ export default function Dashboard() {
   const [selectedAccount, setSelectedAccount] = useState("All");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedBudgetType, setSelectedBudgetType] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Sync date input and form defaults safely without resetting user selections
   useEffect(() => {
@@ -234,6 +235,13 @@ export default function Dashboard() {
       if (filterBType === "need" && bType !== "need" && bType !== "needs") return false;
       if (filterBType === "want" && bType !== "want" && bType !== "wants") return false;
       if (filterBType === "savings" && bType !== "savings") return false;
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim() !== "") {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = txn.Note ? txn.Note.toLowerCase().includes(query) : false;
+      if (!matchesSearch) return false;
     }
 
     return true;
@@ -1046,8 +1054,26 @@ export default function Dashboard() {
 
       {/* RECENT TRANSACTIONS TABLE */}
       <section className="glass-card glow-purple grid-span-3" style={{ marginTop: "32px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "20px" }}>
-          <h3 style={{ margin: 0 }}>🕒 Recent Transaction Activity Ledger</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+            <h3 style={{ margin: 0 }}>🕒 Recent Transaction Activity Ledger</h3>
+            <input
+              type="text"
+              placeholder="Search by title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="glass-input"
+              style={{
+                width: "240px",
+                height: "32px",
+                fontSize: "0.8rem",
+                padding: "0 12px",
+                borderRadius: "16px",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                background: "rgba(255, 255, 255, 0.02)"
+              }}
+            />
+          </div>
           <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500 }}>
             Showing {filteredTransactions.length} of {transactions.length} total entries
           </span>
