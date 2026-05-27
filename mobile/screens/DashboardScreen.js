@@ -40,6 +40,11 @@ export default function DashboardScreen({ theme }) {
   const [inputCurrency, setInputCurrency] = useState("USD");
   const [submitting, setSubmitting] = useState(false);
 
+  // Timeframe and specific date filtering states
+  const [timeframe, setTimeframe] = useState("Month"); // "All", "Today", "Week", "Month", "Year", "Custom"
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
   const handleDateChange = (text) => {
     let cleaned = text.replace(/[^0-9]/g, "");
     let formatted = cleaned;
@@ -150,14 +155,116 @@ export default function DashboardScreen({ theme }) {
     }
   };
 
-  const summary = analytics?.summary || {
-    salary: user?.salary || 5000,
-    rules: { Needs: 50, Wants: 30, Savings: 20 },
-    totalIncome: 5000,
-    totalExpense: 1745,
-    netSavings: 3255,
-    splitExpenses: { Need: 1380, Want: 365, Savings: 0 }
+  // Filter transactions based on selected timeframe
+  const filteredTransactions = transactions.filter(txn => {
+    if (!txn.Date) return false;
+    const txnDateStr = txn.Date.split("T")[0]; // YYYY-MM-DD
+    const todayStr = new Date().toISOString().split("T")[0];
+    
+    if (timeframe === "All") {
+      return true;
+    }
+    
+    if (timeframe === "Today") {
+      return txnDateStr === todayStr;
+    }
+    
+    if (timeframe === "Week") {
+      const today = new Date();
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(today.getDate() - 7);
+      
+      const tDate = new Date(txnDateStr);
+      return tDate >= oneWeekAgo && tDate <= today;
+    }
+    
+    if (timeframe === "Month") {
+      const today = new Date();
+      const tDate = new Date(txnDateStr);
+      return tDate.getFullYear() === today.getFullYear() && tDate.getMonth() === today.getMonth();
+    }
+    
+    if (timeframe === "Year") {
+      const today = new Date();
+      const tDate = new Date(txnDateStr);
+      return tDate.getFullYear() === today.getFullYear();
+    }
+    
+    if (timeframe === "Custom") {
+      if (!customStartDate && !customEndDate) return true;
+      const tDate = new Date(txnDateStr);
+      if (customStartDate && tDate < new Date(customStartDate)) return false;
+      if (customEndDate && tDate > new Date(customEndDate)) return false;
+      return true;
+    }
+    
+    return true;
+  });
+
+  // Compute target timescale multiplier to adapt base targets dynamically
+  const timeScale = (() => {
+    if (timeframe === "Today") return 1 / 30;
+    if (timeframe === "Week") return 7 / 30;
+    if (timeframe === "Month") return 1;
+    if (timeframe === "Year") return 12;
+    if (timeframe === "All" && filteredTransactions.length > 0) {
+      const dates = filteredTransactions.map(t => new Date(t.Date).getTime()).filter(t => !isNaN(t));
+      if (dates.length > 0) {
+        const minDate = new Date(Math.min(...dates));
+        const maxDate = new Date(Math.max(...dates));
+        const diffYears = maxDate.getFullYear() - minDate.getFullYear();
+        const diffMonths = maxDate.getMonth() - minDate.getMonth();
+        return Math.max(1, diffYears * 12 + diffMonths + 1);
+      }
+    }
+    if (timeframe === "Custom" && customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+      return Math.max(1 / 30, diffDays / 30);
+    }
+    return 1;
+  })();
+
+  // Dynamically calculate summary metrics based on filtered transactions and timeScale
+  const getDynamicSummary = () => {
+    const baseSalary = user?.salary || 5000;
+    const rules = analytics?.summary?.rules || { Needs: 50, Wants: 30, Savings: 20 };
+    
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let needSpend = 0;
+    let wantSpend = 0;
+    let savingsSpend = 0;
+    
+    filteredTransactions.forEach(t => {
+      const amt = parseFloat(t.Amount) || 0;
+      if (t.TransactionType === "Income") {
+        totalIncome += amt;
+      } else if (t.TransactionType === "Expense") {
+        totalExpense += amt;
+        if (t.BudgetType === "Need") needSpend += amt;
+        else if (t.BudgetType === "Want") wantSpend += amt;
+        else if (t.BudgetType === "Savings") savingsSpend += amt;
+      }
+    });
+
+    return {
+      salary: baseSalary * timeScale,
+      rules,
+      totalIncome,
+      totalExpense,
+      netSavings: totalIncome - totalExpense,
+      splitExpenses: {
+        Need: needSpend,
+        Want: wantSpend,
+        Savings: savingsSpend
+      }
+    };
   };
+
+  const summary = getDynamicSummary();
 
   const netSavingsPercent = ((summary.netSavings / (summary.salary || 1)) * 100).toFixed(0);
   const expenseUtilization = ((summary.totalExpense / (summary.salary || 1)) * 100).toFixed(0);
@@ -187,23 +294,89 @@ export default function DashboardScreen({ theme }) {
         </View>
       </View>
 
+      {/* Dynamic Date Filtering Pill Control */}
+      <View style={{ marginBottom: 20 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 20 }}>
+          {[
+            { label: "Today", value: "Today" },
+            { label: "This Week", value: "Week" },
+            { label: "This Month", value: "Month" },
+            { label: "This Year", value: "Year" },
+            { label: "All Time", value: "All" },
+            { label: "Custom Range", value: "Custom" }
+          ].map(pill => (
+            <TouchableOpacity
+              key={pill.value}
+              onPress={() => setTimeframe(pill.value)}
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                borderRadius: 20,
+                backgroundColor: timeframe === pill.value ? theme.accentPurple : theme.cardBorder,
+                borderWidth: 1,
+                borderColor: timeframe === pill.value ? theme.accentPurple : "rgba(255,255,255,0.05)"
+              }}
+            >
+              <Text style={{
+                fontSize: 10,
+                fontWeight: "700",
+                color: timeframe === pill.value ? "#FFFFFF" : theme.textSecondary
+              }}>
+                {pill.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {timeframe === "Custom" && (
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 12, alignItems: "center" }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 9, fontWeight: "700", color: theme.textSecondary, marginBottom: 4 }}>START DATE</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary, height: 32 }]}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={theme.textSecondary}
+                value={customStartDate}
+                onChangeText={setCustomStartDate}
+                maxLength={10}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 9, fontWeight: "700", color: theme.textSecondary, marginBottom: 4 }}>END DATE</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: theme.cardBorder, color: theme.textPrimary, height: 32 }]}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={theme.textSecondary}
+                value={customEndDate}
+                onChangeText={setCustomEndDate}
+                maxLength={10}
+              />
+            </View>
+          </View>
+        )}
+      </View>
+
       {/* SCORECARDS */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRow} contentContainerStyle={{ gap: 15, paddingRight: 20 }}>
         {/* Net flow */}
         <View style={[styles.scoreCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, shadowColor: theme.accentPurple }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <Feather name="trending-up" size={10} color={theme.accentPurple} />
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>NET FLOW</Text>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>
+              {timeframe === "Today" ? "DAILY FLOW" : timeframe === "Week" ? "WEEKLY FLOW" : timeframe === "Month" ? "MONTHLY FLOW" : timeframe === "Year" ? "YEARLY FLOW" : timeframe === "All" ? "ALL TIME FLOW" : "PERIOD FLOW"}
+            </Text>
           </View>
           <Text style={[styles.cardValue, { color: theme.accentPurple }]}>{formatCurrency(summary.netSavings)}</Text>
-          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>{netSavingsPercent}% of monthly base</Text>
+          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>{netSavingsPercent}% of period base</Text>
         </View>
 
         {/* Expenses */}
         <View style={[styles.scoreCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, shadowColor: theme.accentRose }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <Feather name="arrow-down-left" size={10} color={theme.accentRose} />
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>EXPENSES</Text>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>
+              {timeframe === "Today" ? "DAILY EXPENSES" : timeframe === "Week" ? "WEEKLY EXPENSES" : timeframe === "Month" ? "MONTHLY EXPENSES" : timeframe === "Year" ? "YEARLY EXPENSES" : timeframe === "All" ? "ALL TIME EXP" : "EXPENSES"}
+            </Text>
           </View>
           <Text style={[styles.cardValue, { color: theme.textPrimary }]}>{formatCurrency(summary.totalExpense)}</Text>
           <Text style={[styles.cardSubText, { color: theme.accentRose }]}>{expenseUtilization}% utilization</Text>
@@ -213,10 +386,14 @@ export default function DashboardScreen({ theme }) {
         <View style={[styles.scoreCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, shadowColor: theme.accentEmerald }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <Feather name="dollar-sign" size={10} color={theme.accentEmerald} />
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>BASE TARGET</Text>
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>
+              {timeframe === "Today" ? "DAILY TARGET" : timeframe === "Week" ? "WEEKLY TARGET" : timeframe === "Month" ? "MONTHLY TARGET" : timeframe === "Year" ? "YEARLY TARGET" : timeframe === "All" ? "ALL TIME TARGET" : "BASE TARGET"}
+            </Text>
           </View>
           <Text style={[styles.cardValue, { color: theme.accentEmerald }]}>{formatCurrency(summary.salary)}</Text>
-          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>Configured in settings</Text>
+          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>
+            {timeframe === "Month" ? "Configured in settings" : `Scaled from settings (${formatCurrency(user?.salary || 5000)})`}
+          </Text>
         </View>
       </ScrollView>
 
@@ -489,12 +666,19 @@ export default function DashboardScreen({ theme }) {
       </View>
 
       {/* RECENT TRANSACTION ACTIVITIES */}
-      <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>🕒 Recent Transactions Activity</Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, marginBottom: 12 }}>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary, marginBottom: 0, marginTop: 0 }]}>🕒 Recent Transactions Activity</Text>
+        <Text style={{ fontSize: 10, fontWeight: "600", color: theme.textSecondary }}>
+          Showing {filteredTransactions.length} of {transactions.length}
+        </Text>
+      </View>
       <View style={[styles.glassCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder }]}>
         {transactions.length === 0 ? (
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No ledger logs recorded. Add some expenses above!</Text>
+        ) : filteredTransactions.length === 0 ? (
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No ledger logs match the selected filters. Try another option!</Text>
         ) : (
-          transactions.map(txn => {
+          filteredTransactions.map(txn => {
             const cat = categories.find(c => c.CategoryName === txn.Category);
             const dotColor = cat ? cat.Color : theme.accentCyan;
 

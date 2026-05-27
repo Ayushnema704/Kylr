@@ -60,6 +60,11 @@ export default function Dashboard() {
   const [inputCurrency, setInputCurrency] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Timeframe and specific date filtering states
+  const [timeframe, setTimeframe] = useState("Month"); // "All", "Today", "Week", "Month", "Year", "Custom"
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
   // Sync date input and form defaults safely without resetting user selections
   useEffect(() => {
     if (!date) {
@@ -151,18 +156,116 @@ export default function Dashboard() {
     return "var(--neon-purple)";
   };
 
-  const dashboardAnalytics = analytics || {
-    summary: {
-      salary: user?.salary || 5000,
-      rules: { Needs: 50, Wants: 30, Savings: 20 },
-      totalIncome: 5000,
-      totalExpense: 1745,
-      netSavings: 3255,
-      splitExpenses: { Need: 1380, Want: 365, Savings: 0 }
+  // Filter transactions based on selected timeframe
+  const filteredTransactions = transactions.filter(txn => {
+    if (!txn.Date) return false;
+    const txnDateStr = txn.Date.split("T")[0]; // YYYY-MM-DD
+    const todayStr = new Date().toISOString().split("T")[0];
+    
+    if (timeframe === "All") {
+      return true;
     }
+    
+    if (timeframe === "Today") {
+      return txnDateStr === todayStr;
+    }
+    
+    if (timeframe === "Week") {
+      const today = new Date();
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(today.getDate() - 7);
+      
+      const tDate = new Date(txnDateStr);
+      return tDate >= oneWeekAgo && tDate <= today;
+    }
+    
+    if (timeframe === "Month") {
+      const today = new Date();
+      const tDate = new Date(txnDateStr);
+      return tDate.getFullYear() === today.getFullYear() && tDate.getMonth() === today.getMonth();
+    }
+    
+    if (timeframe === "Year") {
+      const today = new Date();
+      const tDate = new Date(txnDateStr);
+      return tDate.getFullYear() === today.getFullYear();
+    }
+    
+    if (timeframe === "Custom") {
+      if (!customStartDate && !customEndDate) return true;
+      const tDate = new Date(txnDateStr);
+      if (customStartDate && tDate < new Date(customStartDate)) return false;
+      if (customEndDate && tDate > new Date(customEndDate)) return false;
+      return true;
+    }
+    
+    return true;
+  });
+
+  // Compute target timescale multiplier to adapt base targets dynamically
+  const timeScale = (() => {
+    if (timeframe === "Today") return 1 / 30;
+    if (timeframe === "Week") return 7 / 30;
+    if (timeframe === "Month") return 1;
+    if (timeframe === "Year") return 12;
+    if (timeframe === "All" && filteredTransactions.length > 0) {
+      const dates = filteredTransactions.map(t => new Date(t.Date).getTime()).filter(t => !isNaN(t));
+      if (dates.length > 0) {
+        const minDate = new Date(Math.min(...dates));
+        const maxDate = new Date(Math.max(...dates));
+        const diffYears = maxDate.getFullYear() - minDate.getFullYear();
+        const diffMonths = maxDate.getMonth() - minDate.getMonth();
+        return Math.max(1, diffYears * 12 + diffMonths + 1);
+      }
+    }
+    if (timeframe === "Custom" && customStartDate && customEndDate) {
+      const start = new Date(customStartDate);
+      const end = new Date(customEndDate);
+      const diffTime = Math.abs(end - start);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+      return Math.max(1 / 30, diffDays / 30);
+    }
+    return 1;
+  })();
+
+  // Dynamically calculate summary metrics based on filtered transactions and timeScale
+  const getDynamicSummary = () => {
+    const baseSalary = user?.salary || 5000;
+    const rules = analytics?.summary?.rules || { Needs: 50, Wants: 30, Savings: 20 };
+    
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let needSpend = 0;
+    let wantSpend = 0;
+    let savingsSpend = 0;
+    
+    filteredTransactions.forEach(t => {
+      const amt = parseFloat(t.Amount) || 0;
+      if (t.TransactionType === "Income") {
+        totalIncome += amt;
+      } else if (t.TransactionType === "Expense") {
+        totalExpense += amt;
+        if (t.BudgetType === "Need") needSpend += amt;
+        else if (t.BudgetType === "Want") wantSpend += amt;
+        else if (t.BudgetType === "Savings") savingsSpend += amt;
+      }
+    });
+
+    return {
+      salary: baseSalary * timeScale,
+      rules,
+      totalIncome,
+      totalExpense,
+      netSavings: totalIncome - totalExpense,
+      splitExpenses: {
+        Need: needSpend,
+        Want: wantSpend,
+        Savings: savingsSpend
+      }
+    };
   };
 
-  const summary = dashboardAnalytics.summary;
+  const summary = getDynamicSummary();
 
   return (
     <div>
@@ -180,48 +283,113 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Dynamic Date Filtering Bar */}
+      <section className="glass-card glow-purple" style={{ marginBottom: "24px", padding: "16px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Timeframe Filter:
+          </span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.06)", padding: "4px", borderRadius: "20px" }}>
+            {[
+              { label: "Today", value: "Today" },
+              { label: "This Week", value: "Week" },
+              { label: "This Month", value: "Month" },
+              { label: "This Year", value: "Year" },
+              { label: "All Time", value: "All" },
+              { label: "Custom Range", value: "Custom" }
+            ].map(pill => (
+              <button
+                key={pill.value}
+                type="button"
+                onClick={() => setTimeframe(pill.value)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "16px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: "none",
+                  transition: "all 0.25s ease",
+                  background: timeframe === pill.value ? "var(--neon-purple)" : "transparent",
+                  color: timeframe === pill.value ? "#ffffff" : "var(--text-secondary)",
+                  boxShadow: timeframe === pill.value ? "0 0 10px rgba(139, 92, 246, 0.3)" : "none"
+                }}
+              >
+                {pill.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Custom date range inputs */}
+        {timeframe === "Custom" && (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Start:</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ padding: "6px 10px", fontSize: "0.75rem", width: "130px", height: "32px" }}
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>End:</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ padding: "6px 10px", fontSize: "0.75rem", width: "130px", height: "32px" }}
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* STAT CARDS ROW */}
       <section className="dashboard-grid">
         {/* Net Flow */}
         <div className="glass-card glow-purple">
           <div className="stat-label">
             <TrendingUp size={16} style={{ color: "var(--neon-purple)" }} />
-            <span>Net Financial Flow</span>
+            <span>{timeframe === "Today" ? "Daily Flow" : timeframe === "Week" ? "Weekly Flow" : timeframe === "Month" ? "Monthly Flow" : timeframe === "Year" ? "Yearly Flow" : timeframe === "All" ? "All Time Flow" : "Period Flow"}</span>
           </div>
           <div className="stat-value">
             {formatCurrency(summary.netSavings)}
           </div>
           <div className="stat-change up">
             <ArrowUpRight size={14} />
-            <span>{((summary.netSavings / (summary.salary || 1)) * 100).toFixed(0)}% of monthly base</span>
+            <span>{((summary.netSavings / (summary.salary || 1)) * 100).toFixed(0)}% of period base</span>
           </div>
         </div>
- 
+
         {/* Total Spent */}
         <div className="glass-card glow-cyan">
           <div className="stat-label">
             <ArrowDownLeft size={16} style={{ color: "var(--neon-rose)" }} />
-            <span>Monthly Expenses</span>
+            <span>{timeframe === "Today" ? "Daily Expenses" : timeframe === "Week" ? "Weekly Expenses" : timeframe === "Month" ? "Monthly Expenses" : timeframe === "Year" ? "Yearly Expenses" : timeframe === "All" ? "All Time Expenses" : "Period Expenses"}</span>
           </div>
           <div className="stat-value" style={{ color: "var(--text-primary)" }}>
             {formatCurrency(summary.totalExpense)}
           </div>
           <div className="stat-change down">
-            <span>{((summary.totalExpense / (summary.salary || 1)) * 100).toFixed(0)}% salary utilization</span>
+            <span>{((summary.totalExpense / (summary.salary || 1)) * 100).toFixed(0)}% utilization</span>
           </div>
         </div>
- 
+
         {/* Current Salary Base */}
         <div className="glass-card glow-emerald">
           <div className="stat-label">
             <DollarSign size={16} style={{ color: "var(--neon-emerald)" }} />
-            <span>Monthly Base Income</span>
+            <span>{timeframe === "Today" ? "Daily Base Target" : timeframe === "Week" ? "Weekly Base Target" : timeframe === "Month" ? "Monthly Base Target" : timeframe === "Year" ? "Yearly Base Target" : timeframe === "All" ? "All Time Base Target" : "Period Base Target"}</span>
           </div>
           <div className="stat-value" style={{ color: "var(--neon-emerald)" }}>
             {formatCurrency(summary.salary)}
           </div>
           <div className="stat-change up">
-            <span>Configured target in Settings</span>
+            <span>{timeframe === "Month" ? "Configured target in Settings" : `Scaled from monthly base (${formatCurrency(user?.salary || 5000)})`}</span>
           </div>
         </div>
       </section>
@@ -569,12 +737,21 @@ export default function Dashboard() {
 
       {/* RECENT TRANSACTIONS TABLE */}
       <section className="glass-card glow-purple grid-span-3" style={{ marginTop: "32px" }}>
-        <h3 style={{ marginBottom: "20px" }}>🕒 Recent Transaction Activity Ledger</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "20px" }}>
+          <h3 style={{ margin: 0 }}>🕒 Recent Transaction Activity Ledger</h3>
+          <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500 }}>
+            Showing {filteredTransactions.length} of {transactions.length} total entries
+          </span>
+        </div>
 
         <div className="txn-table-container">
           {transactions.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
               No transactions posted yet. Use the manual entry or NLP AI console above to add your first expense!
+            </div>
+          ) : filteredTransactions.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+              No transactions match the selected filters. Try selecting a different filter option!
             </div>
           ) : (
             <table className="txn-table">
@@ -590,7 +767,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((txn) => {
+                {filteredTransactions.map((txn) => {
                   const matchingCategory = categories.find(c => c.CategoryName === txn.Category);
                   const iconName = matchingCategory ? matchingCategory.Icon : "Tag";
                   const IconComp = IconMap[iconName] || Tag;
