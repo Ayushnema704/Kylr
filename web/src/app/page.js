@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [timeframe, setTimeframe] = useState("Month"); // "All", "Today", "Week", "Month", "Year", "Custom"
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState("All");
 
   // Sync date input and form defaults safely without resetting user selections
   useEffect(() => {
@@ -156,49 +157,41 @@ export default function Dashboard() {
     return "var(--neon-purple)";
   };
 
-  // Filter transactions based on selected timeframe
+  // Filter transactions based on selected timeframe & account
   const filteredTransactions = transactions.filter(txn => {
     if (!txn.Date) return false;
     const txnDateStr = txn.Date.split("T")[0]; // YYYY-MM-DD
     const todayStr = new Date().toISOString().split("T")[0];
     
-    if (timeframe === "All") {
-      return true;
-    }
-    
+    let matchesTimeframe = true;
     if (timeframe === "Today") {
-      return txnDateStr === todayStr;
-    }
-    
-    if (timeframe === "Week") {
+      matchesTimeframe = (txnDateStr === todayStr);
+    } else if (timeframe === "Week") {
       const today = new Date();
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(today.getDate() - 7);
-      
       const tDate = new Date(txnDateStr);
-      return tDate >= oneWeekAgo && tDate <= today;
-    }
-    
-    if (timeframe === "Month") {
+      matchesTimeframe = (tDate >= oneWeekAgo && tDate <= today);
+    } else if (timeframe === "Month") {
       const today = new Date();
       const tDate = new Date(txnDateStr);
-      return tDate.getFullYear() === today.getFullYear() && tDate.getMonth() === today.getMonth();
-    }
-    
-    if (timeframe === "Year") {
+      matchesTimeframe = (tDate.getFullYear() === today.getFullYear() && tDate.getMonth() === today.getMonth());
+    } else if (timeframe === "Year") {
       const today = new Date();
       const tDate = new Date(txnDateStr);
-      return tDate.getFullYear() === today.getFullYear();
+      matchesTimeframe = (tDate.getFullYear() === today.getFullYear());
+    } else if (timeframe === "Custom") {
+      if (customStartDate && new Date(txnDateStr) < new Date(customStartDate)) matchesTimeframe = false;
+      if (customEndDate && new Date(txnDateStr) > new Date(customEndDate)) matchesTimeframe = false;
     }
-    
-    if (timeframe === "Custom") {
-      if (!customStartDate && !customEndDate) return true;
-      const tDate = new Date(txnDateStr);
-      if (customStartDate && tDate < new Date(customStartDate)) return false;
-      if (customEndDate && tDate > new Date(customEndDate)) return false;
-      return true;
+
+    if (!matchesTimeframe) return false;
+
+    // Apply account filter
+    if (selectedAccount !== "All") {
+      return txn.Account === selectedAccount;
     }
-    
+
     return true;
   });
 
@@ -238,9 +231,20 @@ export default function Dashboard() {
     let needSpend = 0;
     let wantSpend = 0;
     let savingsSpend = 0;
+    let cashIn = 0;
+    let cashOut = 0;
     
     filteredTransactions.forEach(t => {
       const amt = parseFloat(t.Amount) || 0;
+      
+      // Track actual cash flow in/out for the filtered account/timeframe
+      if (t.TransactionType === "Income" || t.TransactionType === "Transfer In") {
+        cashIn += amt;
+      }
+      if (t.TransactionType === "Expense" || t.TransactionType === "Transfer Out") {
+        cashOut += amt;
+      }
+
       if (t.TransactionType === "Income") {
         totalIncome += amt;
       } else if (t.TransactionType === "Expense") {
@@ -261,7 +265,10 @@ export default function Dashboard() {
         Need: needSpend,
         Want: wantSpend,
         Savings: savingsSpend
-      }
+      },
+      cashIn,
+      cashOut,
+      accountNetFlow: cashIn - cashOut
     };
   };
 
@@ -283,41 +290,64 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Dynamic Date Filtering Bar */}
+      {/* Dynamic Date & Account Filtering Bar */}
       <section className="glass-card glow-purple" style={{ marginBottom: "24px", padding: "16px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            Timeframe Filter:
-          </span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.06)", padding: "4px", borderRadius: "20px" }}>
-            {[
-              { label: "Today", value: "Today" },
-              { label: "This Week", value: "Week" },
-              { label: "This Month", value: "Month" },
-              { label: "This Year", value: "Year" },
-              { label: "All Time", value: "All" },
-              { label: "Custom Range", value: "Custom" }
-            ].map(pill => (
-              <button
-                key={pill.value}
-                type="button"
-                onClick={() => setTimeframe(pill.value)}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "16px",
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  border: "none",
-                  transition: "all 0.25s ease",
-                  background: timeframe === pill.value ? "var(--neon-purple)" : "transparent",
-                  color: timeframe === pill.value ? "#ffffff" : "var(--text-secondary)",
-                  boxShadow: timeframe === pill.value ? "0 0 10px rgba(139, 92, 246, 0.3)" : "none"
-                }}
-              >
-                {pill.label}
-              </button>
-            ))}
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "24px" }}>
+          {/* Timeframe selector */}
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Timeframe:
+            </span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.06)", padding: "4px", borderRadius: "20px" }}>
+              {[
+                { label: "Today", value: "Today" },
+                { label: "This Week", value: "Week" },
+                { label: "This Month", value: "Month" },
+                { label: "This Year", value: "Year" },
+                { label: "All Time", value: "All" },
+                { label: "Custom Range", value: "Custom" }
+              ].map(pill => (
+                <button
+                  key={pill.value}
+                  type="button"
+                  onClick={() => setTimeframe(pill.value)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "16px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "none",
+                    transition: "all 0.25s ease",
+                    background: timeframe === pill.value ? "var(--neon-purple)" : "transparent",
+                    color: timeframe === pill.value ? "#ffffff" : "var(--text-secondary)",
+                    boxShadow: timeframe === pill.value ? "0 0 10px rgba(139, 92, 246, 0.3)" : "none"
+                  }}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Account Selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Account:
+            </span>
+            <select
+              className="glass-select"
+              style={{ width: "180px", height: "32px", fontSize: "0.75rem", padding: "0 10px", cursor: "pointer" }}
+              value={selectedAccount}
+              onChange={(e) => setSelectedAccount(e.target.value)}
+            >
+              <option value="All">All Accounts</option>
+              {accounts.map(acc => (
+                <option key={acc.AccountID} value={acc.AccountName}>
+                  {acc.AccountName}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -354,14 +384,24 @@ export default function Dashboard() {
         <div className="glass-card glow-purple">
           <div className="stat-label">
             <TrendingUp size={16} style={{ color: "var(--neon-purple)" }} />
-            <span>{timeframe === "Today" ? "Daily Flow" : timeframe === "Week" ? "Weekly Flow" : timeframe === "Month" ? "Monthly Flow" : timeframe === "Year" ? "Yearly Flow" : timeframe === "All" ? "All Time Flow" : "Period Flow"}</span>
+            <span>
+              {selectedAccount !== "All"
+                ? `${selectedAccount} Net Flow`
+                : timeframe === "Today" ? "Daily Flow" : timeframe === "Week" ? "Weekly Flow" : timeframe === "Month" ? "Monthly Flow" : timeframe === "Year" ? "Yearly Flow" : timeframe === "All" ? "All Time Flow" : "Period Flow"
+              }
+            </span>
           </div>
           <div className="stat-value">
-            {formatCurrency(summary.netSavings)}
+            {formatCurrency(selectedAccount !== "All" ? summary.accountNetFlow : summary.netSavings)}
           </div>
           <div className="stat-change up">
             <ArrowUpRight size={14} />
-            <span>{((summary.netSavings / (summary.salary || 1)) * 100).toFixed(0)}% of period base</span>
+            <span>
+              {selectedAccount !== "All"
+                ? "Total cash in minus cash out"
+                : `${((summary.netSavings / (summary.salary || 1)) * 100).toFixed(0)}% of period base`
+              }
+            </span>
           </div>
         </div>
 
@@ -369,13 +409,23 @@ export default function Dashboard() {
         <div className="glass-card glow-cyan">
           <div className="stat-label">
             <ArrowDownLeft size={16} style={{ color: "var(--neon-rose)" }} />
-            <span>{timeframe === "Today" ? "Daily Expenses" : timeframe === "Week" ? "Weekly Expenses" : timeframe === "Month" ? "Monthly Expenses" : timeframe === "Year" ? "Yearly Expenses" : timeframe === "All" ? "All Time Expenses" : "Period Expenses"}</span>
+            <span>
+              {selectedAccount !== "All"
+                ? `${selectedAccount} Cash Out`
+                : timeframe === "Today" ? "Daily Expenses" : timeframe === "Week" ? "Weekly Expenses" : timeframe === "Month" ? "Monthly Expenses" : timeframe === "Year" ? "Yearly Expenses" : timeframe === "All" ? "All Time Expenses" : "Period Expenses"
+              }
+            </span>
           </div>
           <div className="stat-value" style={{ color: "var(--text-primary)" }}>
-            {formatCurrency(summary.totalExpense)}
+            {formatCurrency(selectedAccount !== "All" ? summary.cashOut : summary.totalExpense)}
           </div>
           <div className="stat-change down">
-            <span>{((summary.totalExpense / (summary.salary || 1)) * 100).toFixed(0)}% utilization</span>
+            <span>
+              {selectedAccount !== "All"
+                ? "Expenses and outward transfers"
+                : `${((summary.totalExpense / (summary.salary || 1)) * 100).toFixed(0)}% utilization`
+              }
+            </span>
           </div>
         </div>
 
@@ -383,13 +433,23 @@ export default function Dashboard() {
         <div className="glass-card glow-emerald">
           <div className="stat-label">
             <DollarSign size={16} style={{ color: "var(--neon-emerald)" }} />
-            <span>{timeframe === "Today" ? "Daily Base Target" : timeframe === "Week" ? "Weekly Base Target" : timeframe === "Month" ? "Monthly Base Target" : timeframe === "Year" ? "Yearly Base Target" : timeframe === "All" ? "All Time Base Target" : "Period Base Target"}</span>
+            <span>
+              {selectedAccount !== "All"
+                ? `${selectedAccount} Cash In`
+                : timeframe === "Today" ? "Daily Base Target" : timeframe === "Week" ? "Weekly Base Target" : timeframe === "Month" ? "Monthly Base Target" : timeframe === "Year" ? "Yearly Base Target" : timeframe === "All" ? "All Time Base Target" : "Period Base Target"
+              }
+            </span>
           </div>
           <div className="stat-value" style={{ color: "var(--neon-emerald)" }}>
-            {formatCurrency(summary.salary)}
+            {formatCurrency(selectedAccount !== "All" ? summary.cashIn : summary.salary)}
           </div>
           <div className="stat-change up">
-            <span>{timeframe === "Month" ? "Configured target in Settings" : `Scaled from monthly base (${formatCurrency(user?.salary || 5000)})`}</span>
+            <span>
+              {selectedAccount !== "All"
+                ? "Incomes and inward transfers"
+                : timeframe === "Month" ? "Configured target in Settings" : `Scaled from monthly base (${formatCurrency(user?.salary || 5000)})`
+              }
+            </span>
           </div>
         </div>
       </section>

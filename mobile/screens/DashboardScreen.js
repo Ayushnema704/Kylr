@@ -44,6 +44,7 @@ export default function DashboardScreen({ theme }) {
   const [timeframe, setTimeframe] = useState("Month"); // "All", "Today", "Week", "Month", "Year", "Custom"
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState("All");
 
   const handleDateChange = (text) => {
     let cleaned = text.replace(/[^0-9]/g, "");
@@ -155,49 +156,41 @@ export default function DashboardScreen({ theme }) {
     }
   };
 
-  // Filter transactions based on selected timeframe
+  // Filter transactions based on selected timeframe & account
   const filteredTransactions = transactions.filter(txn => {
     if (!txn.Date) return false;
     const txnDateStr = txn.Date.split("T")[0]; // YYYY-MM-DD
     const todayStr = new Date().toISOString().split("T")[0];
     
-    if (timeframe === "All") {
-      return true;
-    }
-    
+    let matchesTimeframe = true;
     if (timeframe === "Today") {
-      return txnDateStr === todayStr;
-    }
-    
-    if (timeframe === "Week") {
+      matchesTimeframe = (txnDateStr === todayStr);
+    } else if (timeframe === "Week") {
       const today = new Date();
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(today.getDate() - 7);
-      
       const tDate = new Date(txnDateStr);
-      return tDate >= oneWeekAgo && tDate <= today;
-    }
-    
-    if (timeframe === "Month") {
+      matchesTimeframe = (tDate >= oneWeekAgo && tDate <= today);
+    } else if (timeframe === "Month") {
       const today = new Date();
       const tDate = new Date(txnDateStr);
-      return tDate.getFullYear() === today.getFullYear() && tDate.getMonth() === today.getMonth();
-    }
-    
-    if (timeframe === "Year") {
+      matchesTimeframe = (tDate.getFullYear() === today.getFullYear() && tDate.getMonth() === today.getMonth());
+    } else if (timeframe === "Year") {
       const today = new Date();
       const tDate = new Date(txnDateStr);
-      return tDate.getFullYear() === today.getFullYear();
+      matchesTimeframe = (tDate.getFullYear() === today.getFullYear());
+    } else if (timeframe === "Custom") {
+      if (customStartDate && new Date(txnDateStr) < new Date(customStartDate)) matchesTimeframe = false;
+      if (customEndDate && new Date(txnDateStr) > new Date(customEndDate)) matchesTimeframe = false;
     }
-    
-    if (timeframe === "Custom") {
-      if (!customStartDate && !customEndDate) return true;
-      const tDate = new Date(txnDateStr);
-      if (customStartDate && tDate < new Date(customStartDate)) return false;
-      if (customEndDate && tDate > new Date(customEndDate)) return false;
-      return true;
+
+    if (!matchesTimeframe) return false;
+
+    // Apply account filter
+    if (selectedAccount !== "All") {
+      return txn.Account === selectedAccount;
     }
-    
+
     return true;
   });
 
@@ -237,9 +230,20 @@ export default function DashboardScreen({ theme }) {
     let needSpend = 0;
     let wantSpend = 0;
     let savingsSpend = 0;
+    let cashIn = 0;
+    let cashOut = 0;
     
     filteredTransactions.forEach(t => {
       const amt = parseFloat(t.Amount) || 0;
+      
+      // Track actual cash flow in/out for the filtered account/timeframe
+      if (t.TransactionType === "Income" || t.TransactionType === "Transfer In") {
+        cashIn += amt;
+      }
+      if (t.TransactionType === "Expense" || t.TransactionType === "Transfer Out") {
+        cashOut += amt;
+      }
+
       if (t.TransactionType === "Income") {
         totalIncome += amt;
       } else if (t.TransactionType === "Expense") {
@@ -260,7 +264,10 @@ export default function DashboardScreen({ theme }) {
         Need: needSpend,
         Want: wantSpend,
         Savings: savingsSpend
-      }
+      },
+      cashIn,
+      cashOut,
+      accountNetFlow: cashIn - cashOut
     };
   };
 
@@ -296,6 +303,7 @@ export default function DashboardScreen({ theme }) {
 
       {/* Dynamic Date Filtering Pill Control */}
       <View style={{ marginBottom: 20 }}>
+        {/* Timeframe Selector Row */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 20 }}>
           {[
             { label: "Today", value: "Today" },
@@ -323,6 +331,51 @@ export default function DashboardScreen({ theme }) {
                 color: timeframe === pill.value ? "#FFFFFF" : theme.textSecondary
               }}>
                 {pill.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Account Selector Row */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 20, marginTop: 10 }}>
+          <TouchableOpacity
+            onPress={() => setSelectedAccount("All")}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 12,
+              borderRadius: 16,
+              backgroundColor: selectedAccount === "All" ? theme.accentPurple : theme.cardBorder,
+              borderWidth: 1,
+              borderColor: selectedAccount === "All" ? theme.accentPurple : "rgba(255,255,255,0.05)"
+            }}
+          >
+            <Text style={{
+              fontSize: 9,
+              fontWeight: "700",
+              color: selectedAccount === "All" ? "#FFFFFF" : theme.textSecondary
+            }}>
+              All Accounts
+            </Text>
+          </TouchableOpacity>
+          {accounts.map(acc => (
+            <TouchableOpacity
+              key={acc.AccountID}
+              onPress={() => setSelectedAccount(acc.AccountName)}
+              style={{
+                paddingVertical: 6,
+                paddingHorizontal: 12,
+                borderRadius: 16,
+                backgroundColor: selectedAccount === acc.AccountName ? theme.accentPurple : theme.cardBorder,
+                borderWidth: 1,
+                borderColor: selectedAccount === acc.AccountName ? theme.accentPurple : "rgba(255,255,255,0.05)"
+              }}
+            >
+              <Text style={{
+                fontSize: 9,
+                fontWeight: "700",
+                color: selectedAccount === acc.AccountName ? "#FFFFFF" : theme.textSecondary
+              }}>
+                {acc.AccountName}
               </Text>
             </TouchableOpacity>
           ))}
@@ -362,37 +415,53 @@ export default function DashboardScreen({ theme }) {
         <View style={[styles.scoreCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, shadowColor: theme.accentPurple }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <Feather name="trending-up" size={10} color={theme.accentPurple} />
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>
-              {timeframe === "Today" ? "DAILY FLOW" : timeframe === "Week" ? "WEEKLY FLOW" : timeframe === "Month" ? "MONTHLY FLOW" : timeframe === "Year" ? "YEARLY FLOW" : timeframe === "All" ? "ALL TIME FLOW" : "PERIOD FLOW"}
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]} numberOfLines={1}>
+              {selectedAccount !== "All"
+                ? `${selectedAccount.toUpperCase()} FLOW`
+                : timeframe === "Today" ? "DAILY FLOW" : timeframe === "Week" ? "WEEKLY FLOW" : timeframe === "Month" ? "MONTHLY FLOW" : timeframe === "Year" ? "YEARLY FLOW" : timeframe === "All" ? "ALL TIME FLOW" : "PERIOD FLOW"}
             </Text>
           </View>
-          <Text style={[styles.cardValue, { color: theme.accentPurple }]}>{formatCurrency(summary.netSavings)}</Text>
-          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>{netSavingsPercent}% of period base</Text>
+          <Text style={[styles.cardValue, { color: theme.accentPurple }]} numberOfLines={1}>
+            {formatCurrency(selectedAccount !== "All" ? summary.accountNetFlow : summary.netSavings)}
+          </Text>
+          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>
+            {selectedAccount !== "All" ? "Net Period Flow" : `${netSavingsPercent}% of period base`}
+          </Text>
         </View>
 
         {/* Expenses */}
         <View style={[styles.scoreCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, shadowColor: theme.accentRose }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <Feather name="arrow-down-left" size={10} color={theme.accentRose} />
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>
-              {timeframe === "Today" ? "DAILY EXPENSES" : timeframe === "Week" ? "WEEKLY EXPENSES" : timeframe === "Month" ? "MONTHLY EXPENSES" : timeframe === "Year" ? "YEARLY EXPENSES" : timeframe === "All" ? "ALL TIME EXP" : "EXPENSES"}
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]} numberOfLines={1}>
+              {selectedAccount !== "All"
+                ? `${selectedAccount.toUpperCase()} OUT`
+                : timeframe === "Today" ? "DAILY EXPENSES" : timeframe === "Week" ? "WEEKLY EXPENSES" : timeframe === "Month" ? "MONTHLY EXPENSES" : timeframe === "Year" ? "YEARLY EXPENSES" : timeframe === "All" ? "ALL TIME EXP" : "EXPENSES"}
             </Text>
           </View>
-          <Text style={[styles.cardValue, { color: theme.textPrimary }]}>{formatCurrency(summary.totalExpense)}</Text>
-          <Text style={[styles.cardSubText, { color: theme.accentRose }]}>{expenseUtilization}% utilization</Text>
+          <Text style={[styles.cardValue, { color: theme.textPrimary }]} numberOfLines={1}>
+            {formatCurrency(selectedAccount !== "All" ? summary.cashOut : summary.totalExpense)}
+          </Text>
+          <Text style={[styles.cardSubText, { color: theme.accentRose }]}>
+            {selectedAccount !== "All" ? "Outward cash flow" : `${expenseUtilization}% utilization`}
+          </Text>
         </View>
 
         {/* Monthly target */}
         <View style={[styles.scoreCard, { backgroundColor: theme.cardBg, borderColor: theme.cardBorder, shadowColor: theme.accentEmerald }]}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 }}>
             <Feather name="dollar-sign" size={10} color={theme.accentEmerald} />
-            <Text style={[styles.cardLabel, { color: theme.textSecondary }]}>
-              {timeframe === "Today" ? "DAILY TARGET" : timeframe === "Week" ? "WEEKLY TARGET" : timeframe === "Month" ? "MONTHLY TARGET" : timeframe === "Year" ? "YEARLY TARGET" : timeframe === "All" ? "ALL TIME TARGET" : "BASE TARGET"}
+            <Text style={[styles.cardLabel, { color: theme.textSecondary }]} numberOfLines={1}>
+              {selectedAccount !== "All"
+                ? `${selectedAccount.toUpperCase()} IN`
+                : timeframe === "Today" ? "DAILY TARGET" : timeframe === "Week" ? "WEEKLY TARGET" : timeframe === "Month" ? "MONTHLY TARGET" : timeframe === "Year" ? "YEARLY TARGET" : timeframe === "All" ? "ALL TIME TARGET" : "BASE TARGET"}
             </Text>
           </View>
-          <Text style={[styles.cardValue, { color: theme.accentEmerald }]}>{formatCurrency(summary.salary)}</Text>
-          <Text style={[styles.cardSubText, { color: theme.textSecondary }]}>
-            {timeframe === "Month" ? "Configured in settings" : `Scaled from settings (${formatCurrency(user?.salary || 5000)})`}
+          <Text style={[styles.cardValue, { color: theme.accentEmerald }]} numberOfLines={1}>
+            {formatCurrency(selectedAccount !== "All" ? summary.cashIn : summary.salary)}
+          </Text>
+          <Text style={[styles.cardSubText, { color: theme.textSecondary }]} numberOfLines={1}>
+            {selectedAccount !== "All" ? "Inward cash flow" : `Target (${formatCurrency(user?.salary || 5000)})`}
           </Text>
         </View>
       </ScrollView>
