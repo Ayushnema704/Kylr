@@ -84,15 +84,20 @@ export default function Accounts() {
   const totalAssets = accounts
     .filter(a => a.AccountType !== "Credit Card")
     .reduce((sum, a) => {
-      const bal = parseFloat(a.CurrentBalance) || 0;
-      const qty = parseFloat(a.Quantity || a.quantity) || 0;
+      const balVal = a.CurrentBalance !== undefined ? a.CurrentBalance : (a.currentBalance !== undefined ? a.currentBalance : 0);
+      const bal = parseFloat(balVal) || 0;
+      const qtyVal = parseFloat(a.Quantity !== undefined ? a.Quantity : a.quantity) || 0;
+      const buyPriceVal = parseFloat(a.BuyPrice !== undefined ? a.BuyPrice : a.buyPrice) || 0;
       const isInvestment = a.AccountType === "Investment (Mutual Fund)" || a.AccountType === "Investment (Stocks)";
-      return sum + (isInvestment ? (bal * qty) : bal);
+      return sum + (isInvestment ? (bal * qtyVal) : bal);
     }, 0);
 
   const totalLiabilities = accounts
     .filter(a => a.AccountType === "Credit Card")
-    .reduce((sum, a) => sum + Math.abs(parseFloat(a.CurrentBalance)), 0);
+    .reduce((sum, a) => {
+      const balVal = a.CurrentBalance !== undefined ? a.CurrentBalance : (a.currentBalance !== undefined ? a.currentBalance : 0);
+      return sum + Math.abs(parseFloat(balVal) || 0);
+    }, 0);
 
   return (
     <div>
@@ -164,9 +169,10 @@ export default function Accounts() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
             {accounts.map(acc => {
               const isInvestment = acc.AccountType === "Investment (Mutual Fund)" || acc.AccountType === "Investment (Stocks)";
-              const qtyVal = parseFloat(acc.Quantity || acc.quantity) || 0;
-              const buyPriceVal = parseFloat(acc.BuyPrice || acc.buyPrice) || 0;
-              const currentPriceVal = parseFloat(acc.CurrentBalance) || 0;
+              const qtyVal = parseFloat(acc.Quantity !== undefined ? acc.Quantity : acc.quantity) || 0;
+              const buyPriceVal = parseFloat(acc.BuyPrice !== undefined ? acc.BuyPrice : acc.buyPrice) || 0;
+              const balanceRaw = acc.CurrentBalance !== undefined ? acc.CurrentBalance : (acc.currentBalance !== undefined ? acc.currentBalance : 0);
+              const currentPriceVal = parseFloat(balanceRaw) || 0;
               const totalInvestedVal = qtyVal * buyPriceVal;
               const totalCurrentVal = qtyVal * currentPriceVal;
               const gainLossAmount = totalCurrentVal - totalInvestedVal;
@@ -248,7 +254,7 @@ export default function Accounts() {
                         <div className="card-balance">
                           {isInvestment 
                             ? formatCurrency(totalCurrentVal) 
-                            : formatCurrency(acc.CurrentBalance)
+                            : formatCurrency(balanceRaw)
                           }
                         </div>
                       </div>

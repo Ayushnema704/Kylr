@@ -316,6 +316,11 @@ export function DataProvider({ children }) {
   const formatCurrency = useCallback((amount, currencyCode = null) => {
     const activeCurrency = currencyCode || user?.currency || "USD";
     const symbol = CURRENCY_MAP[activeCurrency]?.symbol || "$";
+    
+    if (amount === undefined || amount === null || amount === "" || amount === "-") {
+      return `${symbol}0.00`;
+    }
+    
     const num = parseFloat(amount);
     if (isNaN(num)) return `${symbol}0.00`;
     
