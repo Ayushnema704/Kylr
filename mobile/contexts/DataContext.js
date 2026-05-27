@@ -242,7 +242,37 @@ export function DataProvider({ children }) {
 
         if (jsonCat.success) setCategories(jsonCat.categories);
         if (jsonAcc.success) setAccounts(jsonAcc.accounts);
-        if (jsonTxn.success) setTransactions(jsonTxn.transactions);
+        if (jsonTxn.success) {
+          // Process transactions to split any legacy single "Transfer" row into two entries
+          const processed = [];
+          jsonTxn.transactions.forEach(t => {
+            if (t.TransactionType === "Transfer") {
+              const sourceAccount = t.Account;
+              const destAccount = t.DestinationAccount || t.destinationAccount || "Destination Account";
+              
+              // 1. Debit entry (Transfer Out)
+              const outTxn = {
+                ...t,
+                TransactionID: t.TransactionID + "_OUT",
+                TransactionType: "Transfer Out",
+                Note: t.Note ? `${t.Note} (Transfer to ${destAccount})` : `Transfer to ${destAccount}`
+              };
+              
+              // 2. Credit entry (Transfer In)
+              const inTxn = {
+                ...t,
+                TransactionID: t.TransactionID + "_IN",
+                TransactionType: "Transfer In",
+                Account: destAccount,
+                Note: t.Note ? `${t.Note} (Transfer from ${sourceAccount})` : `Transfer from ${sourceAccount}`
+              };
+              processed.push(outTxn, inTxn);
+            } else {
+              processed.push(t);
+            }
+          });
+          setTransactions(processed);
+        }
         if (jsonAnly.success) setAnalytics(jsonAnly);
 
         if (geminiApiKey) {
@@ -573,60 +603,82 @@ export function DataProvider({ children }) {
 
   const deleteTransaction = async (txnId) => {
     if (isSandbox) {
-      const txnToDelete = transactions.find(t => t.TransactionID === txnId);
-      if (!txnToDelete) return { success: false };
+      const target = transactions.find(t => t.TransactionID === txnId);
+      if (!target) return { success: false };
 
-      const updatedTxns = transactions.filter(t => t.TransactionID !== txnId);
+      // If it is a transfer, delete both target and partner locally
+      let toRemove = [target.TransactionID];
+      let partner = null;
+      if (target.TransactionType === "Transfer Out" || target.TransactionType === "Transfer In") {
+        const partnerType = target.TransactionType === "Transfer Out" ? "Transfer In" : "Transfer Out";
+        partner = transactions.find(t => 
+          t.Date === target.Date && 
+          t.Amount === target.Amount && 
+          t.TransactionType === partnerType && 
+          t.TransactionID !== target.TransactionID
+        );
+        if (partner) toRemove.push(partner.TransactionID);
+      }
+
+      const updatedTxns = transactions.filter(t => !toRemove.includes(t.TransactionID));
       setTransactions(updatedTxns);
       await AsyncStorage.setItem("kylr_txns", JSON.stringify(updatedTxns));
 
+      // Revert local account balances for both
       const updatedAccs = accounts.map(a => {
-        if (a.AccountName === txnToDelete.Account) {
-          const balAdjust = txnToDelete.TransactionType === "Income" ? -txnToDelete.Amount : txnToDelete.Amount;
-          return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + balAdjust };
+        let balChange = 0;
+        if (a.AccountName === target.Account) {
+          balChange += target.TransactionType === "Income" ? -target.Amount : target.Amount;
         }
-        return a;
+        if (partner && a.AccountName === partner.Account) {
+          balChange += partner.TransactionType === "Income" ? -partner.Amount : partner.Amount;
+        }
+        return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + balChange };
       });
       setAccounts(updatedAccs);
       await AsyncStorage.setItem("kylr_accounts", JSON.stringify(updatedAccs));
-      recalculateSandboxAnalytics(updatedTxns, updatedAccs);
 
+      recalculateSandboxAnalytics(updatedTxns, updatedAccs);
       return { success: true };
     } else {
       try {
-        const postUrl = `${appsScriptUrl}?action=deleteTransaction&uid=${user.uid}&transactionId=${txnId}`;
+        const cleanTxnId = txnId.replace("_OUT", "").replace("_IN", "");
+        const postUrl = `${appsScriptUrl}?action=deleteTransaction&uid=${user.uid}&transactionId=${cleanTxnId}`;
         const res = await fetch(postUrl, { method: "POST" });
         const json = await res.json();
         if (json.success) {
           // Revert local account balance immediately for instant UI updates
           const target = transactions.find(t => t.TransactionID === txnId);
           if (target) {
-            if (target.TransactionType === "Transfer Out") {
-              const updated = accounts.map(a => {
-                if (a.AccountName === target.Account) {
-                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + parseFloat(target.Amount) };
-                }
-                return a;
-              });
-              setAccounts(updated);
-            } else if (target.TransactionType === "Transfer In") {
-              const updated = accounts.map(a => {
-                if (a.AccountName === target.Account) {
-                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) - parseFloat(target.Amount) };
-                }
-                return a;
-              });
-              setAccounts(updated);
-            } else {
-              const updated = accounts.map(a => {
-                if (a.AccountName === target.Account) {
-                  const change = target.TransactionType === "Income" ? -parseFloat(target.Amount) : parseFloat(target.Amount);
-                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + change };
-                }
-                return a;
-              });
-              setAccounts(updated);
+            let partner = null;
+            if (target.TransactionType === "Transfer Out" || target.TransactionType === "Transfer In") {
+              const partnerType = target.TransactionType === "Transfer Out" ? "Transfer In" : "Transfer Out";
+              partner = transactions.find(t => 
+                t.Date === target.Date && 
+                parseFloat(t.Amount) === parseFloat(target.Amount) && 
+                t.TransactionType === partnerType && 
+                t.TransactionID !== target.TransactionID
+              );
             }
+
+            const updated = accounts.map(a => {
+              let balChange = 0;
+              if (a.AccountName === target.Account) {
+                const multiplier = (target.TransactionType === "Income" || target.TransactionType === "Transfer In") ? -1 : 1;
+                balChange += parseFloat(target.Amount) * multiplier;
+              }
+              if (partner && a.AccountName === partner.Account) {
+                const partnerMultiplier = partner.TransactionType === "Transfer In" ? -1 : 1;
+                balChange += parseFloat(partner.Amount) * partnerMultiplier;
+              }
+              return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + balChange };
+            });
+            setAccounts(updated);
+
+            // Optimistically remove both transactions from local React state
+            const toRemove = [target.TransactionID];
+            if (partner) toRemove.push(partner.TransactionID);
+            setTransactions(prev => prev.filter(t => !toRemove.includes(t.TransactionID)));
           }
           await refreshData();
           return { success: true };

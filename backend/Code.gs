@@ -443,10 +443,52 @@ function deleteTransaction(uid, txnId) {
   }
   
   // Revert balance before deleting
-  const multiplier = target.TransactionType === "Income" ? -1 : 1;
+  const multiplier = (target.TransactionType === "Income" || target.TransactionType === "Transfer In") ? -1 : 1;
   adjustAccountBalance(uid, target.Account, parseFloat(target.Amount) * multiplier, "Income"); // simulated Income to reverse
   
-  sheet.deleteRow(target.rowIndex);
+  // If it is a transfer, also find and delete the corresponding visual transfer entry
+  if (target.TransactionType === "Transfer Out" || target.TransactionType === "Transfer In") {
+    const partnerType = target.TransactionType === "Transfer Out" ? "Transfer In" : "Transfer Out";
+    
+    // Find the partner entry in the transactions
+    const partner = txns.find(t => 
+      t.Date === target.Date && 
+      parseFloat(t.Amount) === parseFloat(target.Amount) && 
+      t.TransactionType === partnerType && 
+      String(t.TransactionID) !== String(target.TransactionID)
+    );
+    
+    if (partner) {
+      // Revert partner's balance
+      const partnerMultiplier = partner.TransactionType === "Transfer In" ? -1 : 1;
+      adjustAccountBalance(uid, partner.Account, parseFloat(partner.Amount) * partnerMultiplier, "Income");
+      
+      const partnerSheet = ss.getSheetByName(partner.sheetName);
+      if (partnerSheet) {
+        // If they are in the same sheet, handle index shifting safely
+        if (partner.sheetName === target.sheetName) {
+          if (partner.rowIndex > target.rowIndex) {
+            sheet.deleteRow(target.rowIndex);
+            sheet.deleteRow(partner.rowIndex - 1);
+          } else {
+            sheet.deleteRow(partner.rowIndex);
+            sheet.deleteRow(target.rowIndex - 1);
+          }
+        } else {
+          // Different monthly sheets
+          sheet.deleteRow(target.rowIndex);
+          partnerSheet.deleteRow(partner.rowIndex);
+        }
+      } else {
+        sheet.deleteRow(target.rowIndex);
+      }
+    } else {
+      sheet.deleteRow(target.rowIndex);
+    }
+  } else {
+    sheet.deleteRow(target.rowIndex);
+  }
+  
   SpreadsheetApp.flush(); // Force database commit immediately
   return { success: true, message: "Transaction deleted successfully" };
 }

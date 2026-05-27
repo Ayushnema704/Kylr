@@ -244,7 +244,37 @@ export function DataProvider({ children }) {
 
         if (jsonCat.success) setCategories(jsonCat.categories);
         if (jsonAcc.success) setAccounts(jsonAcc.accounts);
-        if (jsonTxn.success) setTransactions(jsonTxn.transactions);
+        if (jsonTxn.success) {
+          // Process transactions to split any single "Transfer" row into two entries
+          const processed = [];
+          jsonTxn.transactions.forEach(t => {
+            if (t.TransactionType === "Transfer") {
+              const sourceAccount = t.Account;
+              const destAccount = t.DestinationAccount || t.destinationAccount || "Destination Account";
+              
+              // 1. Debit entry (Transfer Out)
+              const outTxn = {
+                ...t,
+                TransactionID: t.TransactionID + "_OUT",
+                TransactionType: "Transfer Out",
+                Note: t.Note ? `${t.Note} (Transfer to ${destAccount})` : `Transfer to ${destAccount}`
+              };
+              
+              // 2. Credit entry (Transfer In)
+              const inTxn = {
+                ...t,
+                TransactionID: t.TransactionID + "_IN",
+                TransactionType: "Transfer In",
+                Account: destAccount,
+                Note: t.Note ? `${t.Note} (Transfer from ${sourceAccount})` : `Transfer from ${sourceAccount}`
+              };
+              processed.push(outTxn, inTxn);
+            } else {
+              processed.push(t);
+            }
+          });
+          setTransactions(processed);
+        }
         if (jsonAnly.success) setAnalytics(jsonAnly);
 
         // 5. Fetch AI Insights
@@ -593,17 +623,34 @@ export function DataProvider({ children }) {
       const target = transactions.find(t => t.TransactionID === txnId);
       if (!target) return { success: false };
 
-      const updatedTxns = transactions.filter(t => t.TransactionID !== txnId);
+      // If it is a transfer, delete both target and partner locally
+      let toRemove = [target.TransactionID];
+      let partner = null;
+      if (target.TransactionType === "Transfer Out" || target.TransactionType === "Transfer In") {
+        const partnerType = target.TransactionType === "Transfer Out" ? "Transfer In" : "Transfer Out";
+        partner = transactions.find(t => 
+          t.Date === target.Date && 
+          t.Amount === target.Amount && 
+          t.TransactionType === partnerType && 
+          t.TransactionID !== target.TransactionID
+        );
+        if (partner) toRemove.push(partner.TransactionID);
+      }
+
+      const updatedTxns = transactions.filter(t => !toRemove.includes(t.TransactionID));
       setTransactions(updatedTxns);
       localStorage.setItem("kylr_txns", JSON.stringify(updatedTxns));
 
-      // Revert local account balance
+      // Revert local account balances for both
       const updatedAccs = accounts.map(a => {
+        let balChange = 0;
         if (a.AccountName === target.Account) {
-          const change = target.TransactionType === "Income" ? -target.Amount : target.Amount;
-          return { ...a, CurrentBalance: a.CurrentBalance + change };
+          balChange += target.TransactionType === "Income" ? -target.Amount : target.Amount;
         }
-        return a;
+        if (partner && a.AccountName === partner.Account) {
+          balChange += partner.TransactionType === "Income" ? -partner.Amount : partner.Amount;
+        }
+        return { ...a, CurrentBalance: a.CurrentBalance + balChange };
       });
       setAccounts(updatedAccs);
       localStorage.setItem("kylr_accounts", JSON.stringify(updatedAccs));
@@ -615,7 +662,7 @@ export function DataProvider({ children }) {
         const payload = {
           action: "deleteTransaction",
           uid: user.uid,
-          transactionId: txnId
+          transactionId: txnId.replace("_OUT", "").replace("_IN", "") // Clean temporary front-end IDs
         };
         const res = await fetch(appsScriptUrl, {
           method: "POST",
@@ -627,32 +674,35 @@ export function DataProvider({ children }) {
           // Revert local account balance immediately for instant UI updates
           const target = transactions.find(t => t.TransactionID === txnId);
           if (target) {
-            if (target.TransactionType === "Transfer Out") {
-              const updated = accounts.map(a => {
-                if (a.AccountName === target.Account) {
-                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + parseFloat(target.Amount) };
-                }
-                return a;
-              });
-              setAccounts(updated);
-            } else if (target.TransactionType === "Transfer In") {
-              const updated = accounts.map(a => {
-                if (a.AccountName === target.Account) {
-                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) - parseFloat(target.Amount) };
-                }
-                return a;
-              });
-              setAccounts(updated);
-            } else {
-              const updated = accounts.map(a => {
-                if (a.AccountName === target.Account) {
-                  const change = target.TransactionType === "Income" ? -parseFloat(target.Amount) : parseFloat(target.Amount);
-                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + change };
-                }
-                return a;
-              });
-              setAccounts(updated);
+            let partner = null;
+            if (target.TransactionType === "Transfer Out" || target.TransactionType === "Transfer In") {
+              const partnerType = target.TransactionType === "Transfer Out" ? "Transfer In" : "Transfer Out";
+              partner = transactions.find(t => 
+                t.Date === target.Date && 
+                parseFloat(t.Amount) === parseFloat(target.Amount) && 
+                t.TransactionType === partnerType && 
+                t.TransactionID !== target.TransactionID
+              );
             }
+
+            const updated = accounts.map(a => {
+              let balChange = 0;
+              if (a.AccountName === target.Account) {
+                const multiplier = (target.TransactionType === "Income" || target.TransactionType === "Transfer In") ? -1 : 1;
+                balChange += parseFloat(target.Amount) * multiplier;
+              }
+              if (partner && a.AccountName === partner.Account) {
+                const partnerMultiplier = partner.TransactionType === "Transfer In" ? -1 : 1;
+                balChange += parseFloat(partner.Amount) * partnerMultiplier;
+              }
+              return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + balChange };
+            });
+            setAccounts(updated);
+
+            // Optimistically remove both transactions from local React state
+            const toRemove = [target.TransactionID];
+            if (partner) toRemove.push(partner.TransactionID);
+            setTransactions(prev => prev.filter(t => !toRemove.includes(t.TransactionID)));
           }
           await refreshData();
         }
