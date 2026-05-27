@@ -768,8 +768,8 @@ export default function DashboardScreen({ theme }) {
                   </View>
                 </View>
                 <View style={{ alignItems: "flex-end", justifyContent: "center" }}>
-                  <Text style={[styles.txnAmount, { color: txn.TransactionType === "Income" ? theme.accentEmerald : theme.accentRose }]}>
-                    {txn.TransactionType === "Income" ? "+" : "-"}{formatCurrency(txn.Amount)}
+                  <Text style={[styles.txnAmount, { color: (txn.TransactionType === "Income" || txn.TransactionType === "Transfer In") ? theme.accentEmerald : theme.accentRose }]}>
+                    {(txn.TransactionType === "Income" || txn.TransactionType === "Transfer In") ? "+" : "-"}{formatCurrency(txn.Amount)}
                   </Text>
                   <TouchableOpacity onPress={() => deleteTransaction(txn.TransactionID)} style={{ marginTop: 6 }}>
                     <Text style={{ fontSize: 10, color: theme.accentRose, fontWeight: "700" }}>Delete</Text>

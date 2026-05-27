@@ -1123,8 +1123,8 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td>
-                        <span className={`txn-amount ${txn.TransactionType === "Income" ? "income" : "expense"}`}>
-                          {txn.TransactionType === "Income" ? "+" : "-"}{formatCurrency(txn.Amount)}
+                        <span className={`txn-amount ${(txn.TransactionType === "Income" || txn.TransactionType === "Transfer In") ? "income" : "expense"}`}>
+                          {(txn.TransactionType === "Income" || txn.TransactionType === "Transfer In") ? "+" : "-"}{formatCurrency(txn.Amount)}
                         </span>
                       </td>
                       <td>
