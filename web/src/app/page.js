@@ -93,6 +93,8 @@ export default function Dashboard() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [selectedAccount, setSelectedAccount] = useState("All");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedBudgetType, setSelectedBudgetType] = useState("All");
 
   // Sync date input and form defaults safely without resetting user selections
   useEffect(() => {
@@ -185,7 +187,7 @@ export default function Dashboard() {
     return "var(--neon-purple)";
   };
 
-  // Filter transactions based on selected timeframe & account
+  // Filter transactions based on selected timeframe, account, category, and budget type
   const filteredTransactions = transactions.filter(txn => {
     if (!txn.Date) return false;
     const txnDateStr = txn.Date.split("T")[0]; // YYYY-MM-DD
@@ -217,7 +219,21 @@ export default function Dashboard() {
 
     // Apply account filter
     if (selectedAccount !== "All") {
-      return txn.Account === selectedAccount;
+      if (txn.Account !== selectedAccount) return false;
+    }
+
+    // Apply category filter
+    if (selectedCategory !== "All") {
+      if (txn.Category !== selectedCategory) return false;
+    }
+
+    // Apply budget type filter
+    if (selectedBudgetType !== "All") {
+      const bType = txn.BudgetType ? txn.BudgetType.toLowerCase() : "";
+      const filterBType = selectedBudgetType.toLowerCase();
+      if (filterBType === "need" && bType !== "need" && bType !== "needs") return false;
+      if (filterBType === "want" && bType !== "want" && bType !== "wants") return false;
+      if (filterBType === "savings" && bType !== "savings") return false;
     }
 
     return true;
@@ -365,7 +381,7 @@ export default function Dashboard() {
             </span>
             <select
               className="glass-select"
-              style={{ width: "180px", height: "32px", fontSize: "0.75rem", padding: "0 10px", cursor: "pointer" }}
+              style={{ width: "160px", height: "32px", fontSize: "0.75rem", padding: "0 10px", cursor: "pointer" }}
               value={selectedAccount}
               onChange={(e) => setSelectedAccount(e.target.value)}
             >
@@ -375,6 +391,44 @@ export default function Dashboard() {
                   {acc.AccountName}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Category Selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Category:
+            </span>
+            <select
+              className="glass-select"
+              style={{ width: "160px", height: "32px", fontSize: "0.75rem", padding: "0 10px", cursor: "pointer" }}
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="All">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat.CategoryID} value={cat.CategoryName}>
+                  {cat.CategoryName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Budget Tag Selector */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Budget Tag:
+            </span>
+            <select
+              className="glass-select"
+              style={{ width: "140px", height: "32px", fontSize: "0.75rem", padding: "0 10px", cursor: "pointer" }}
+              value={selectedBudgetType}
+              onChange={(e) => setSelectedBudgetType(e.target.value)}
+            >
+              <option value="All">All Tags</option>
+              <option value="Need">Needs</option>
+              <option value="Want">Wants</option>
+              <option value="Savings">Savings</option>
             </select>
           </div>
 

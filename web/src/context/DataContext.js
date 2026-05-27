@@ -526,6 +526,33 @@ export function DataProvider({ children }) {
               return a;
             });
             setAccounts(updated);
+
+            // Construct and prepend optimistic double transaction rows for instant UI feedback
+            const outTxn = {
+              TransactionID: resJson.transactionId || "TX_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+              Date: data.date || new Date().toISOString().split("T")[0],
+              Amount: finalAmount,
+              TransactionType: "Transfer Out",
+              Category: "Transfer",
+              Account: data.account,
+              Note: finalNote ? `${finalNote} (Transfer to ${data.destinationAccount})` : `Transfer to ${data.destinationAccount}`,
+              BudgetType: "Savings",
+              CreatedAt: new Date().toISOString()
+            };
+            
+            const inTxn = {
+              TransactionID: "TX_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+              Date: data.date || new Date().toISOString().split("T")[0],
+              Amount: finalAmount,
+              TransactionType: "Transfer In",
+              Category: "Transfer",
+              Account: data.destinationAccount,
+              Note: finalNote ? `${finalNote} (Transfer from ${data.account})` : `Transfer from ${data.account}`,
+              BudgetType: "Savings",
+              CreatedAt: new Date().toISOString()
+            };
+            
+            setTransactions(prev => [outTxn, inTxn, ...prev]);
           } else {
             const updated = accounts.map(a => {
               if (a.AccountName === data.account) {
@@ -535,6 +562,21 @@ export function DataProvider({ children }) {
               return a;
             });
             setAccounts(updated);
+
+            // Construct and prepend optimistic single transaction row
+            const newTxn = {
+              TransactionID: resJson.transactionId || "TX_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+              Date: data.date || new Date().toISOString().split("T")[0],
+              Amount: finalAmount,
+              TransactionType: data.transactionType || "Expense",
+              Category: data.category || "Dining Out",
+              Account: data.account || "HDFC Savings",
+              Note: finalNote,
+              BudgetType: data.budgetType || "Want",
+              CreatedAt: new Date().toISOString()
+            };
+            
+            setTransactions(prev => [newTxn, ...prev]);
           }
           await refreshData();
         }
