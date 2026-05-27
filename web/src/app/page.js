@@ -1098,6 +1098,7 @@ export default function Dashboard() {
                   <th>Account Source</th>
                   <th>Date</th>
                   <th>Amount</th>
+                  <th>Balance Left</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -1151,6 +1152,15 @@ export default function Dashboard() {
                       <td>
                         <span className={`txn-amount ${(txn.TransactionType === "Income" || txn.TransactionType === "Transfer In") ? "income" : "expense"}`}>
                           {(txn.TransactionType === "Income" || txn.TransactionType === "Transfer In") ? "+" : "-"}{formatCurrency(txn.Amount)}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ 
+                          color: "var(--text-secondary)", 
+                          fontSize: "0.85rem",
+                          fontWeight: 600
+                        }}>
+                          {txn.RunningBalance !== undefined ? formatCurrency(txn.RunningBalance) : "-"}
                         </span>
                       </td>
                       <td>

@@ -181,6 +181,55 @@ export function DataProvider({ children }) {
     });
   }, [user]);
 
+  const attachRunningBalances = useCallback((txnsList, accsList) => {
+    if (!txnsList || txnsList.length === 0 || !accsList || accsList.length === 0) return txnsList;
+
+    // Group transactions by account
+    const txnsByAccount = {};
+    accsList.forEach(a => {
+      txnsByAccount[a.AccountName] = [];
+    });
+
+    txnsList.forEach(t => {
+      if (txnsByAccount[t.Account]) {
+        txnsByAccount[t.Account].push(t);
+      }
+    });
+
+    // For each account, sort transactions oldest to newest and compute running balance backward
+    accsList.forEach(a => {
+      const accountTxns = txnsByAccount[a.AccountName];
+      if (!accountTxns || accountTxns.length === 0) return;
+
+      // Sort oldest to newest
+      accountTxns.sort((x, y) => {
+        const dx = new Date(x.Date);
+        const dy = new Date(y.Date);
+        if (dx.getTime() !== dy.getTime()) {
+          return dx - dy;
+        }
+        const tx = x.CreatedAt ? new Date(x.CreatedAt) : 0;
+        const ty = y.CreatedAt ? new Date(y.CreatedAt) : 0;
+        return tx - ty;
+      });
+
+      let currentBal = parseFloat(a.CurrentBalance) || 0;
+      for (let i = accountTxns.length - 1; i >= 0; i--) {
+        const t = accountTxns[i];
+        t.RunningBalance = currentBal;
+
+        const amt = parseFloat(t.Amount) || 0;
+        if (t.TransactionType === "Income" || t.TransactionType === "Transfer In") {
+          currentBal -= amt;
+        } else if (t.TransactionType === "Expense" || t.TransactionType === "Transfer Out") {
+          currentBal += amt;
+        }
+      }
+    });
+
+    return txnsList;
+  }, []);
+
   // Fetch all user records
   const refreshData = useCallback(async () => {
     if (!user) return;
@@ -208,10 +257,11 @@ export function DataProvider({ children }) {
         localStorage.setItem("kylr_accounts", JSON.stringify(loadedAccs));
       }
 
-      setTransactions(loadedTxns);
+      const processedTxns = attachRunningBalances(loadedTxns, loadedAccs);
+      setTransactions(processedTxns);
       setCategories(loadedCats);
       setAccounts(loadedAccs);
-      recalculateSandboxAnalytics(loadedTxns, loadedAccs);
+      recalculateSandboxAnalytics(processedTxns, loadedAccs);
       
       setAiInsights(
         `🤖 **Sandbox Active**: Doing awesome! You saved $${(user.salary - loadedTxns.filter(t => t.TransactionType === 'Expense').reduce((acc, c) => acc + c.Amount, 0)).toFixed(2)} so far! Check your visual graphs. Connect your Apps Script URL in Settings to sync live Google Sheets!`
@@ -273,7 +323,9 @@ export function DataProvider({ children }) {
               processed.push(t);
             }
           });
-          setTransactions(processed);
+          const accs = jsonAcc.success ? jsonAcc.accounts : accounts;
+          const withBalances = attachRunningBalances(processed, accs);
+          setTransactions(withBalances);
         }
         if (jsonAnly.success) setAnalytics(jsonAnly);
 
@@ -291,7 +343,7 @@ export function DataProvider({ children }) {
         setLoading(false);
       }
     }
-  }, [user, isSandbox, appsScriptUrl, geminiApiKey, recalculateSandboxAnalytics, getSandboxDefaults]);
+  }, [user, isSandbox, appsScriptUrl, geminiApiKey, recalculateSandboxAnalytics, getSandboxDefaults, attachRunningBalances]);
 
   // Initial fetch trigger
   useEffect(() => {
