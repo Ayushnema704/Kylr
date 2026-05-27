@@ -271,7 +271,7 @@ function updateBudget(uid, data) {
   } else {
     sheet.appendRow([uid, name, "", salary, ruleEnabled, needs, wants, savings, new Date().toISOString()]);
   }
-  
+  SpreadsheetApp.flush(); // Force database commit immediately
   return { success: true, message: "Profile & budget rule updated successfully" };
 }
 
@@ -424,7 +424,7 @@ function addTransaction(uid, data) {
   
   // Dynamically update the account balance
   adjustAccountBalance(uid, account, amount, type);
-  
+  SpreadsheetApp.flush(); // Force database commit immediately
   return { success: true, transactionId: id, message: "Transaction added successfully to " + sheetName };
 }
 
@@ -447,6 +447,7 @@ function deleteTransaction(uid, txnId) {
   adjustAccountBalance(uid, target.Account, parseFloat(target.Amount) * multiplier, "Income"); // simulated Income to reverse
   
   sheet.deleteRow(target.rowIndex);
+  SpreadsheetApp.flush(); // Force database commit immediately
   return { success: true, message: "Transaction deleted successfully" };
 }
 
@@ -602,7 +603,7 @@ function addAccount(uid, data) {
     buyPrice,
     quantity
   ]);
-  
+  SpreadsheetApp.flush(); // Force database commit immediately
   return { success: true, accountId: id, message: "Financial Account created successfully" };
 }
 
@@ -617,6 +618,7 @@ function deleteAccount(uid, accId) {
   }
   
   sheet.deleteRow(target.rowIndex);
+  SpreadsheetApp.flush(); // Force database commit immediately
   return { success: true, message: "Account deleted successfully" };
 }
 

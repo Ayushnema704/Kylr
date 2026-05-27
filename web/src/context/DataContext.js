@@ -509,6 +509,28 @@ export function DataProvider({ children }) {
         });
         const resJson = await res.json();
         if (resJson.success) {
+          // Adjust Account Balance locally immediately to ensure instant UI updates
+          if (data.transactionType === "Transfer") {
+            const updated = accounts.map(a => {
+              if (a.AccountName === data.account) {
+                return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) - finalAmount };
+              }
+              if (a.AccountName === data.destinationAccount) {
+                return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + finalAmount };
+              }
+              return a;
+            });
+            setAccounts(updated);
+          } else {
+            const updated = accounts.map(a => {
+              if (a.AccountName === data.account) {
+                const change = data.transactionType === "Income" ? finalAmount : -finalAmount;
+                return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + change };
+              }
+              return a;
+            });
+            setAccounts(updated);
+          }
           await refreshData();
         }
         return resJson;
@@ -555,6 +577,36 @@ export function DataProvider({ children }) {
         });
         const resJson = await res.json();
         if (resJson.success) {
+          // Revert local account balance immediately for instant UI updates
+          const target = transactions.find(t => t.TransactionID === txnId);
+          if (target) {
+            if (target.TransactionType === "Transfer Out") {
+              const updated = accounts.map(a => {
+                if (a.AccountName === target.Account) {
+                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + parseFloat(target.Amount) };
+                }
+                return a;
+              });
+              setAccounts(updated);
+            } else if (target.TransactionType === "Transfer In") {
+              const updated = accounts.map(a => {
+                if (a.AccountName === target.Account) {
+                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) - parseFloat(target.Amount) };
+                }
+                return a;
+              });
+              setAccounts(updated);
+            } else {
+              const updated = accounts.map(a => {
+                if (a.AccountName === target.Account) {
+                  const change = target.TransactionType === "Income" ? -parseFloat(target.Amount) : parseFloat(target.Amount);
+                  return { ...a, CurrentBalance: parseFloat(a.CurrentBalance) + change };
+                }
+                return a;
+              });
+              setAccounts(updated);
+            }
+          }
           await refreshData();
         }
         return resJson;
