@@ -158,6 +158,12 @@ h1, h2, h3, h4, h5 {
   top: 0;
   background: rgba(5, 5, 8, 0.7);
   backdrop-filter: var(--glass-blur);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-collapsed .sidebar {
+  width: 78px;
+  padding: 32px 12px;
 }
 
 .logo-container {
@@ -273,6 +279,11 @@ h1, h2, h3, h4, h5 {
   max-width: 1400px;
   margin: 0 auto;
   width: calc(100vw - 260px);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-collapsed .main-content {
+  width: calc(100vw - 78px);
 }
 
 /* Header summary widget */

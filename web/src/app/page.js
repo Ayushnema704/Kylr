@@ -15,7 +15,11 @@ import {
   CreditCard, 
   Tv, 
   Tag, 
-  TrendingUp
+  TrendingUp,
+  SlidersHorizontal,
+  Eye,
+  EyeOff,
+  Minimize2
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData, CURRENCY_MAP } from "../context/DataContext";
@@ -59,6 +63,30 @@ export default function Dashboard() {
   const [date, setDate] = useState("");
   const [inputCurrency, setInputCurrency] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Panel visibility states for custom layouts
+  const [leftVisible, setLeftVisible] = useState(true);
+  const [rightVisible, setRightVisible] = useState(true);
+  const [showLayoutDropdown, setShowLayoutDropdown] = useState(false);
+
+  useEffect(() => {
+    const leftVal = localStorage.getItem("kylr_left_panel_visible");
+    const rightVal = localStorage.getItem("kylr_right_panel_visible");
+    if (leftVal !== null) setLeftVisible(leftVal === "true");
+    if (rightVal !== null) setRightVisible(rightVal === "true");
+  }, []);
+
+  const toggleLeftPanel = () => {
+    const nextVal = !leftVisible;
+    setLeftVisible(nextVal);
+    localStorage.setItem("kylr_left_panel_visible", nextVal ? "true" : "false");
+  };
+
+  const toggleRightPanel = () => {
+    const nextVal = !rightVisible;
+    setRightVisible(nextVal);
+    localStorage.setItem("kylr_right_panel_visible", nextVal ? "true" : "false");
+  };
 
   // Timeframe and specific date filtering states
   const [timeframe, setTimeframe] = useState("Month"); // "All", "Today", "Week", "Month", "Year", "Custom"
@@ -349,6 +377,79 @@ export default function Dashboard() {
               ))}
             </select>
           </div>
+
+          {/* Workspace Layout Control */}
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setShowLayoutDropdown(!showLayoutDropdown)}
+              className="glass-button secondary"
+              style={{
+                padding: "6px 14px",
+                fontSize: "0.75rem",
+                height: "32px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                borderRadius: "16px",
+                cursor: "pointer"
+              }}
+            >
+              <SlidersHorizontal size={12} style={{ color: "var(--neon-purple)" }} />
+              <span>Layout Config</span>
+            </button>
+
+            {showLayoutDropdown && (
+              <div 
+                className="glass-panel"
+                style={{
+                  position: "absolute",
+                  top: "38px",
+                  left: "0",
+                  width: "220px",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                  zIndex: 999,
+                  boxShadow: "0 10px 30px rgba(0, 0, 0, 0.6)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "12px",
+                  background: "rgba(10, 10, 18, 0.95)"
+                }}
+              >
+                <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Workspace Panels
+                </span>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontSize: "0.8rem", color: "var(--text-primary)" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {leftVisible ? <Eye size={12} style={{ color: "var(--neon-purple)" }} /> : <EyeOff size={12} style={{ color: "var(--text-muted)" }} />}
+                    Budget Health
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={leftVisible}
+                    onChange={toggleLeftPanel}
+                    style={{ cursor: "pointer", accentColor: "var(--neon-purple)" }}
+                  />
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontSize: "0.8rem", color: "var(--text-primary)" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {rightVisible ? <Eye size={12} style={{ color: "var(--neon-emerald)" }} /> : <EyeOff size={12} style={{ color: "var(--text-muted)" }} />}
+                    Manual entry
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={rightVisible}
+                    onChange={toggleRightPanel}
+                    style={{ cursor: "pointer", accentColor: "var(--neon-emerald)" }}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Custom date range inputs */}
@@ -455,345 +556,439 @@ export default function Dashboard() {
       </section>
 
       {/* MAIN TWO COLUMN VIEW */}
-      <section className="dashboard-grid">
-        {/* LEFT COLUMN: 50-30-20 RULE & NLP QUICK ADD */}
-        <div className="grid-span-2" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          
-          {/* 50-30-20 Budget Progress Panel */}
-          <div className="glass-card glow-purple">
-            <h3 style={{ marginBottom: "8px", fontFamily: "var(--font-display)" }}>50-30-20 Budget Health Tracker</h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "20px" }}>
-              Ratios split automatically from your base income: 
-              Need ({formatCurrency(summary.salary * summary.rules.Needs / 100)}) | 
-              Want ({formatCurrency(summary.salary * summary.rules.Wants / 100)}) | 
-              Savings ({formatCurrency(summary.salary * summary.rules.Savings / 100)})
-            </p>
- 
-            <div className="budget-meter-container">
-              {/* NEEDS */}
-              <div className="budget-meter-row">
-                <div className="budget-meter-info">
-                  <span className="budget-meter-title" style={{ color: "var(--neon-emerald)" }}>
-                    <Home size={14} /> Needs ({summary.rules.Needs}%)
-                  </span>
-                  <span>
-                    {formatCurrency(summary.splitExpenses.Need)} / {formatCurrency(summary.salary * summary.rules.Needs / 100)}
-                  </span>
-                </div>
-                <div className="budget-meter-bar-outer">
-                  <div 
-                    className="budget-meter-bar-inner" 
-                    style={{ 
-                      width: `${Math.min((summary.splitExpenses.Need / (summary.salary * summary.rules.Needs / 100)) * 100, 100)}%`,
-                      background: "var(--neon-emerald)" 
-                    }}
-                  />
-                </div>
-              </div>
- 
-              {/* WANTS */}
-              <div className="budget-meter-row">
-                <div className="budget-meter-info">
-                  <span className="budget-meter-title" style={{ color: "var(--neon-cyan)" }}>
-                    <ShoppingBag size={14} /> Wants ({summary.rules.Wants}%)
-                  </span>
-                  <span>
-                    {formatCurrency(summary.splitExpenses.Want)} / {formatCurrency(summary.salary * summary.rules.Wants / 100)}
-                  </span>
-                </div>
-                <div className="budget-meter-bar-outer">
-                  <div 
-                    className="budget-meter-bar-inner" 
-                    style={{ 
-                      width: `${Math.min((summary.splitExpenses.Want / (summary.salary * summary.rules.Wants / 100)) * 100, 100)}%`,
-                      background: getProgressColor((summary.splitExpenses.Want / (summary.salary * summary.rules.Wants / 100)) * 100)
-                    }}
-                  />
-                </div>
-              </div>
- 
-              {/* SAVINGS */}
-              <div className="budget-meter-row">
-                <div className="budget-meter-info">
-                  <span className="budget-meter-title" style={{ color: "var(--neon-purple)" }}>
-                    <TrendingUp size={14} /> Savings ({summary.rules.Savings}%)
-                  </span>
-                  <span>
-                    {formatCurrency(summary.splitExpenses.Savings)} / {formatCurrency(summary.salary * summary.rules.Savings / 100)}
-                  </span>
-                </div>
-                <div className="budget-meter-bar-outer">
-                  <div 
-                    className="budget-meter-bar-inner" 
-                    style={{ 
-                      width: `${Math.min((summary.splitExpenses.Savings / (summary.salary * summary.rules.Savings / 100)) * 100, 100)}%`,
-                      background: "var(--neon-purple)" 
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
+      {!leftVisible && !rightVisible ? (
+        <div 
+          className="glass-card glow-purple grid-span-3"
+          style={{
+            padding: "40px",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "16px",
+            background: "linear-gradient(135deg, rgba(139, 92, 246, 0.04) 0%, rgba(16, 185, 129, 0.04) 100%)",
+            border: "1px solid rgba(255, 255, 255, 0.08)"
+          }}
+        >
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "center", color: "var(--neon-purple)" }}>
+            <SlidersHorizontal size={24} style={{ animation: "pulse-glow 2s infinite ease-in-out" }} />
+            <h3 style={{ fontSize: "1.3rem", margin: 0, fontFamily: "var(--font-display)" }}>Spreadsheet Focus View Active</h3>
+          </div>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", maxWidth: "600px", margin: "0 auto", lineHeight: "1.6" }}>
+            The 50-30-20 Budget Tracker and the Manual Entry Ledger forms are currently collapsed. Enjoy your distraction-free ledger view, or re-open either panel instantly.
+          </p>
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginTop: "8px" }}>
+            <button 
+              type="button" 
+              onClick={toggleLeftPanel}
+              className="glass-button secondary"
+              style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", padding: "10px 18px", borderRadius: "10px" }}
+            >
+              <Eye size={14} style={{ color: "var(--neon-purple)" }} />
+              <span>Show Budget Health</span>
+            </button>
+            <button 
+              type="button" 
+              onClick={toggleRightPanel}
+              className="glass-button secondary"
+              style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", padding: "10px 18px", borderRadius: "10px" }}
+            >
+              <Eye size={14} style={{ color: "var(--neon-emerald)" }} />
+              <span>Show Manual Entry</span>
+            </button>
           </div>
         </div>
-
-        {/* RIGHT COLUMN: MANUAL ENTRY PANEL */}
-        <div className="glass-card glow-emerald">
-          <h3 style={{ marginBottom: "16px" }}>📝 Manual Entry Ledger</h3>
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            
-            {/* Amount & Input Currency */}
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Amount</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="glass-input" 
-                  required
-                  disabled={submitting}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Currency</label>
-                <select 
-                  className="glass-select"
-                  value={inputCurrency}
-                  onChange={(e) => setInputCurrency(e.target.value)}
-                  disabled={submitting}
-                >
-                  {Object.keys(CURRENCY_MAP).map(code => (
-                    <option key={code} value={code}>{code}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Real-time conversion preview */}
-            {amount && !isNaN(parseFloat(amount)) && inputCurrency !== (user?.currency || "USD") && (
-              <div style={{
-                background: "rgba(139, 92, 246, 0.08)",
-                border: "1px dashed var(--border-neon-purple)",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                fontSize: "0.8rem",
-                color: "var(--neon-purple)",
-                fontWeight: 600,
-                display: "flex",
-                justifyContent: "space-between"
-              }}>
-                <span>Portfolio Equivalent:</span>
-                <span>
-                  {CURRENCY_MAP[inputCurrency]?.symbol}{parseFloat(amount).toFixed(2)} {inputCurrency} ≈ {formatCurrency(convertCurrency(parseFloat(amount), inputCurrency, user?.currency || "USD"))}
-                </span>
-              </div>
-            )}
-
-            {/* Note */}
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Description</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Swiggy delivery"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="glass-input" 
-                disabled={submitting}
-              />
-            </div>
-
-            {/* Grid 2 Elements */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {/* Type */}
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Flow Type</label>
-                <select 
-                  className="glass-select"
-                  value={transactionType}
-                  onChange={(e) => setTransactionType(e.target.value)}
-                  disabled={submitting}
-                >
-                  <option value="Expense">Expense</option>
-                  <option value="Income">Income</option>
-                  <option value="Transfer">Transfer</option>
-                </select>
-              </div>
-
-              {/* Account selection */}
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                  {transactionType === "Transfer" ? "Source Account" : "Funding Source"}
-                </label>
-                <select 
-                  className="glass-select"
-                  value={account}
-                  onChange={(e) => setAccount(e.target.value)}
-                  disabled={submitting}
-                >
-                  {accounts.map(acc => (
-                    <option key={acc.AccountID} value={acc.AccountName}>{acc.AccountName}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Conditional selectors depending on Flow Type */}
-            {transactionType === "Transfer" ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                {/* Destination Account */}
-                <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Destination Account</label>
-                  <select
-                    className="glass-select"
-                    value={destinationAccount}
-                    onChange={(e) => setDestinationAccount(e.target.value)}
-                    disabled={submitting}
+      ) : (
+        <section className="dashboard-grid">
+          {/* LEFT COLUMN: 50-30-20 RULE & NLP QUICK ADD */}
+          {leftVisible && (
+            <div className={rightVisible ? "grid-span-2" : "grid-span-3"} style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              
+              {/* 50-30-20 Budget Progress Panel */}
+              <div className="glass-card glow-purple" style={{ position: "relative" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <h3 style={{ margin: 0, fontFamily: "var(--font-display)" }}>50-30-20 Budget Health Tracker</h3>
+                  <button
+                    type="button"
+                    onClick={toggleLeftPanel}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "4px"
+                    }}
+                    onMouseEnter={(e) => e.target.style.color = "var(--neon-rose)"}
+                    onMouseLeave={(e) => e.target.style.color = "var(--text-muted)"}
+                    title="Collapse Panel"
                   >
-                    {accounts.filter(acc => acc.AccountName !== account).map(acc => (
-                      <option key={acc.AccountID} value={acc.AccountName}>{acc.AccountName}</option>
-                    ))}
-                  </select>
+                    <Minimize2 size={16} />
+                  </button>
                 </div>
-
-                {/* Date */}
-                <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
-                  <input 
-                    type="date" 
-                    className="glass-input" 
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    disabled={submitting}
-                  />
+                
+                <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "20px" }}>
+                  Ratios split automatically from your base income: 
+                  Need ({formatCurrency(summary.salary * summary.rules.Needs / 100)}) | 
+                  Want ({formatCurrency(summary.salary * summary.rules.Wants / 100)}) | 
+                  Savings ({formatCurrency(summary.salary * summary.rules.Savings / 100)})
+                </p>
+    
+                <div className="budget-meter-container">
+                  {/* NEEDS */}
+                  <div className="budget-meter-row">
+                    <div className="budget-meter-info">
+                      <span className="budget-meter-title" style={{ color: "var(--neon-emerald)" }}>
+                        <Home size={14} /> Needs ({summary.rules.Needs}%)
+                      </span>
+                      <span>
+                        {formatCurrency(summary.splitExpenses.Need)} / {formatCurrency(summary.salary * summary.rules.Needs / 100)}
+                      </span>
+                    </div>
+                    <div className="budget-meter-bar-outer">
+                      <div 
+                        className="budget-meter-bar-inner" 
+                        style={{ 
+                          width: `${Math.min((summary.splitExpenses.Need / (summary.salary * summary.rules.Needs / 100)) * 100, 100)}%`,
+                          background: "var(--neon-emerald)" 
+                        }}
+                      />
+                    </div>
+                  </div>
+    
+                  {/* WANTS */}
+                  <div className="budget-meter-row">
+                    <div className="budget-meter-info">
+                      <span className="budget-meter-title" style={{ color: "var(--neon-cyan)" }}>
+                        <ShoppingBag size={14} /> Wants ({summary.rules.Wants}%)
+                      </span>
+                      <span>
+                        {formatCurrency(summary.splitExpenses.Want)} / {formatCurrency(summary.salary * summary.rules.Wants / 100)}
+                      </span>
+                    </div>
+                    <div className="budget-meter-bar-outer">
+                      <div 
+                        className="budget-meter-bar-inner" 
+                        style={{ 
+                          width: `${Math.min((summary.splitExpenses.Want / (summary.salary * summary.rules.Wants / 100)) * 100, 100)}%`,
+                          background: getProgressColor((summary.splitExpenses.Want / (summary.salary * summary.rules.Wants / 100)) * 100)
+                        }}
+                      />
+                    </div>
+                  </div>
+    
+                  {/* SAVINGS */}
+                  <div className="budget-meter-row">
+                    <div className="budget-meter-info">
+                      <span className="budget-meter-title" style={{ color: "var(--neon-purple)" }}>
+                        <TrendingUp size={14} /> Savings ({summary.rules.Savings}%)
+                      </span>
+                      <span>
+                        {formatCurrency(summary.splitExpenses.Savings)} / {formatCurrency(summary.salary * summary.rules.Savings / 100)}
+                      </span>
+                    </div>
+                    <div className="budget-meter-bar-outer">
+                      <div 
+                        className="budget-meter-bar-inner" 
+                        style={{ 
+                          width: `${Math.min((summary.splitExpenses.Savings / (summary.salary * summary.rules.Savings / 100)) * 100, 100)}%`,
+                          background: "var(--neon-purple)" 
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  {/* Category */}
-                  <div>
-                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Category</label>
-                    <select 
-                      className="glass-select"
-                      value={category}
-                      onChange={(e) => handleCategoryChange(e.target.value)}
-                      disabled={submitting}
-                    >
-                      {categories.map(cat => (
-                        <option key={cat.CategoryID} value={cat.CategoryName}>{cat.CategoryName}</option>
-                      ))}
-                    </select>
-                  </div>
+            </div>
+          )}
 
-                  {/* Date */}
+          {/* RIGHT COLUMN: MANUAL ENTRY PANEL */}
+          {rightVisible && (
+            <div className={leftVisible ? "glass-card glow-emerald" : "glass-card glow-emerald grid-span-3"}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <h3 style={{ margin: 0, fontFamily: "var(--font-display)" }}>📝 Manual Entry Ledger</h3>
+                <button
+                  type="button"
+                  onClick={toggleRightPanel}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "4px"
+                  }}
+                  onMouseEnter={(e) => e.target.style.color = "var(--neon-rose)"}
+                  onMouseLeave={(e) => e.target.style.color = "var(--text-muted)"}
+                  title="Collapse Panel"
+                >
+                  <Minimize2 size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                
+                {/* Amount & Input Currency */}
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px" }}>
                   <div>
-                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Amount</label>
                     <input 
-                      type="date" 
+                      type="number" 
+                      step="0.01"
+                      placeholder="0.00"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
                       className="glass-input" 
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      required
                       disabled={submitting}
                     />
                   </div>
-                </div>
-
-                {/* Interactive Budget Tag selector */}
-                <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
-                    Budget Tag Allocation
-                  </label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-                    <button
-                      type="button"
-                      onClick={() => setBudgetType("Need")}
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Currency</label>
+                    <select 
+                      className="glass-select"
+                      value={inputCurrency}
+                      onChange={(e) => setInputCurrency(e.target.value)}
                       disabled={submitting}
-                      style={{
-                        padding: "10px",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        cursor: submitting ? "not-allowed" : "pointer",
-                        opacity: submitting ? 0.6 : 1,
-                        background: budgetType === "Need" ? "rgba(16, 185, 129, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                        border: budgetType === "Need" ? "1px solid var(--neon-emerald)" : "1px solid rgba(255,255,255,0.06)",
-                        color: budgetType === "Need" ? "var(--neon-emerald)" : "var(--text-secondary)",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.8rem",
-                        transition: "all 0.2s ease"
-                      }}
                     >
-                      Needs
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBudgetType("Want")}
-                      disabled={submitting}
-                      style={{
-                        padding: "10px",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        cursor: submitting ? "not-allowed" : "pointer",
-                        opacity: submitting ? 0.6 : 1,
-                        background: budgetType === "Want" ? "rgba(6, 182, 212, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                        border: budgetType === "Want" ? "1px solid var(--neon-cyan)" : "1px solid rgba(255,255,255,0.06)",
-                        color: budgetType === "Want" ? "var(--neon-cyan)" : "var(--text-secondary)",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.8rem",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      Wants
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBudgetType("Savings")}
-                      disabled={submitting}
-                      style={{
-                        padding: "10px",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        cursor: submitting ? "not-allowed" : "pointer",
-                        opacity: submitting ? 0.6 : 1,
-                        background: budgetType === "Savings" ? "rgba(139, 92, 246, 0.12)" : "rgba(255, 255, 255, 0.02)",
-                        border: budgetType === "Savings" ? "1px solid var(--neon-purple)" : "1px solid rgba(255,255,255,0.06)",
-                        color: budgetType === "Savings" ? "var(--neon-purple)" : "var(--text-secondary)",
-                        borderRadius: "8px",
-                        fontWeight: 600,
-                        fontSize: "0.8rem",
-                        transition: "all 0.2s ease"
-                      }}
-                    >
-                      Savings
-                    </button>
+                      {Object.keys(CURRENCY_MAP).map(code => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-              </>
-            )}
 
-            <button 
-              type="submit" 
-              className="glass-button" 
-              style={{ width: "100%", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <span>🔄 Syncing transaction...</span>
-              ) : (
-                <>
-                  <Plus size={16} /> Add Transaction Record
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-      </section>
+                {/* Real-time conversion preview */}
+                {amount && !isNaN(parseFloat(amount)) && inputCurrency !== (user?.currency || "USD") && (
+                  <div style={{
+                    background: "rgba(139, 92, 246, 0.08)",
+                    border: "1px dashed var(--border-neon-purple)",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    fontSize: "0.8rem",
+                    color: "var(--neon-purple)",
+                    fontWeight: 600,
+                    display: "flex",
+                    justifyContent: "space-between"
+                  }}>
+                    <span>Portfolio Equivalent:</span>
+                    <span>
+                      {CURRENCY_MAP[inputCurrency]?.symbol}{parseFloat(amount).toFixed(2)} {inputCurrency} ≈ {formatCurrency(convertCurrency(parseFloat(amount), inputCurrency, user?.currency || "USD"))}
+                    </span>
+                  </div>
+                )}
+
+                {/* Note */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Description</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Swiggy delivery"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="glass-input" 
+                    disabled={submitting}
+                  />
+                </div>
+
+                {/* Grid 2 Elements */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  {/* Type */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Flow Type</label>
+                    <select 
+                      className="glass-select"
+                      value={transactionType}
+                      onChange={(e) => setTransactionType(e.target.value)}
+                      disabled={submitting}
+                    >
+                      <option value="Expense">Expense</option>
+                      <option value="Income">Income</option>
+                      <option value="Transfer">Transfer</option>
+                    </select>
+                  </div>
+
+                  {/* Account selection */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                      {transactionType === "Transfer" ? "Source Account" : "Funding Source"}
+                    </label>
+                    <select 
+                      className="glass-select"
+                      value={account}
+                      onChange={(e) => setAccount(e.target.value)}
+                      disabled={submitting}
+                    >
+                      {accounts.map(acc => (
+                        <option key={acc.AccountID} value={acc.AccountName}>{acc.AccountName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Conditional selectors depending on Flow Type */}
+                {transactionType === "Transfer" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    {/* Destination Account */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Destination Account</label>
+                      <select
+                        className="glass-select"
+                        value={destinationAccount}
+                        onChange={(e) => setDestinationAccount(e.target.value)}
+                        disabled={submitting}
+                      >
+                        {accounts.filter(acc => acc.AccountName !== account).map(acc => (
+                          <option key={acc.AccountID} value={acc.AccountName}>{acc.AccountName}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Date */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
+                      <input 
+                        type="date" 
+                        className="glass-input" 
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      {/* Category */}
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Category</label>
+                        <select 
+                          className="glass-select"
+                          value={category}
+                          onChange={(e) => handleCategoryChange(e.target.value)}
+                          disabled={submitting}
+                        >
+                          {categories.map(cat => (
+                            <option key={cat.CategoryID} value={cat.CategoryName}>{cat.CategoryName}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Date */}
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "6px" }}>Date</label>
+                        <input 
+                          type="date" 
+                          className="glass-input" 
+                          value={date}
+                          onChange={(e) => setDate(e.target.value)}
+                          disabled={submitting}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Interactive Budget Tag selector */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                        Budget Tag Allocation
+                      </label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setBudgetType("Need")}
+                          disabled={submitting}
+                          style={{
+                            padding: "10px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            cursor: submitting ? "not-allowed" : "pointer",
+                            opacity: submitting ? 0.6 : 1,
+                            background: budgetType === "Need" ? "rgba(16, 185, 129, 0.12)" : "rgba(255, 255, 255, 0.02)",
+                            border: budgetType === "Need" ? "1px solid var(--neon-emerald)" : "1px solid rgba(255,255,255,0.06)",
+                            color: budgetType === "Need" ? "var(--neon-emerald)" : "var(--text-secondary)",
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            transition: "all 0.2s ease"
+                          }}
+                        >
+                          Needs
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBudgetType("Want")}
+                          disabled={submitting}
+                          style={{
+                            padding: "10px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            cursor: submitting ? "not-allowed" : "pointer",
+                            opacity: submitting ? 0.6 : 1,
+                            background: budgetType === "Want" ? "rgba(6, 182, 212, 0.12)" : "rgba(255, 255, 255, 0.02)",
+                            border: budgetType === "Want" ? "1px solid var(--neon-cyan)" : "1px solid rgba(255,255,255,0.06)",
+                            color: budgetType === "Want" ? "var(--neon-cyan)" : "var(--text-secondary)",
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            transition: "all 0.2s ease"
+                          }}
+                        >
+                          Wants
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBudgetType("Savings")}
+                          disabled={submitting}
+                          style={{
+                            padding: "10px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            cursor: submitting ? "not-allowed" : "pointer",
+                            opacity: submitting ? 0.6 : 1,
+                            background: budgetType === "Savings" ? "rgba(139, 92, 246, 0.12)" : "rgba(255, 255, 255, 0.02)",
+                            border: budgetType === "Savings" ? "1px solid var(--neon-purple)" : "1px solid rgba(255,255,255,0.06)",
+                            color: budgetType === "Savings" ? "var(--neon-purple)" : "var(--text-secondary)",
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            transition: "all 0.2s ease"
+                          }}
+                        >
+                          Savings
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <button 
+                  type="submit" 
+                  className="glass-button" 
+                  style={{ width: "100%", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <span>🔄 Syncing transaction...</span>
+                  ) : (
+                    <>
+                      <Plus size={16} /> Add Transaction Record
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* RECENT TRANSACTIONS TABLE */}
       <section className="glass-card glow-purple grid-span-3" style={{ marginTop: "32px" }}>

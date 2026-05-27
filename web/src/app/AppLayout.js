@@ -12,7 +12,9 @@ import {
   Shield,
   Activity,
   Sun,
-  Moon
+  Moon,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
@@ -27,11 +29,21 @@ export default function AppLayout({ children }) {
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState("");
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
   useEffect(() => {
     setMounted(true);
     const savedTheme = localStorage.getItem("kylr_theme") || "dark";
     setTheme(savedTheme);
+    const collapsed = localStorage.getItem("kylr_sidebar_collapsed") === "true";
+    setIsSidebarCollapsed(collapsed);
   }, []);
+
+  const toggleSidebar = () => {
+    const nextCollapsed = !isSidebarCollapsed;
+    setIsSidebarCollapsed(nextCollapsed);
+    localStorage.setItem("kylr_sidebar_collapsed", nextCollapsed ? "true" : "false");
+  };
 
   const handleUnlock = (e) => {
     e.preventDefault();
@@ -180,12 +192,42 @@ export default function AppLayout({ children }) {
   }
 
   return (
-    <div className={`app-wrapper ${mounted && theme === "light" ? "light-theme" : ""}`}>
+    <div className={`app-wrapper ${mounted && theme === "light" ? "light-theme" : ""} ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       {/* Dynamic Futuristic Sidebar */}
       <aside className="sidebar">
-        <div className="logo-container">
+        <div className="logo-container" style={{ position: "relative", justifyContent: isSidebarCollapsed ? "center" : "flex-start", paddingLeft: isSidebarCollapsed ? "0" : "8px" }}>
           <div className="logo-icon">K</div>
-          <span className="logo-text">KYLR</span>
+          {!isSidebarCollapsed && <span className="logo-text">KYLR</span>}
+          
+          <button 
+            onClick={toggleSidebar}
+            style={{
+              position: "absolute",
+              right: isSidebarCollapsed ? "-20px" : "-10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: theme === "light" ? "var(--bg-panel)" : "rgba(13, 13, 23, 0.95)",
+              border: "1px solid var(--border-glow)",
+              borderRadius: "50%",
+              width: "24px",
+              height: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--neon-purple)",
+              cursor: "pointer",
+              boxShadow: "0 0 10px rgba(139, 92, 246, 0.25)",
+              transition: "all 0.3s ease",
+              zIndex: 100
+            }}
+            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            {isSidebarCollapsed ? (
+              <ChevronRight size={14} />
+            ) : (
+              <ChevronLeft size={14} />
+            )}
+          </button>
         </div>
 
         {/* Tab Links */}
@@ -199,9 +241,11 @@ export default function AppLayout({ children }) {
                   <Link 
                     href={item.path} 
                     className={`nav-link ${isActive ? "active" : ""}`}
+                    title={isSidebarCollapsed ? item.name : ""}
+                    style={{ justifyContent: isSidebarCollapsed ? "center" : "flex-start" }}
                   >
                     <IconComp size={18} />
-                    <span>{item.name}</span>
+                    {!isSidebarCollapsed && <span>{item.name}</span>}
                   </Link>
                 </li>
               );
@@ -216,7 +260,7 @@ export default function AppLayout({ children }) {
             className="glass-button secondary"
             style={{ 
               width: "100%", 
-              justifyContent: "flex-start", 
+              justifyContent: isSidebarCollapsed ? "center" : "flex-start", 
               fontSize: "0.8rem", 
               padding: "10px 14px", 
               borderRadius: "10px", 
@@ -227,62 +271,67 @@ export default function AppLayout({ children }) {
               cursor: "pointer",
               transition: "all 0.2s ease"
             }}
+            title={theme === "dark" ? "Switch to Beige UI" : "Switch to Dark Cyber"}
           >
             {theme === "dark" ? (
               <>
                 <Sun size={14} style={{ color: "var(--neon-amber)" }} />
-                <span>Switch to Beige UI</span>
+                {!isSidebarCollapsed && <span>Switch to Beige UI</span>}
               </>
             ) : (
               <>
                 <Moon size={14} style={{ color: "var(--neon-purple)" }} />
-                <span>Switch to Dark Cyber</span>
+                {!isSidebarCollapsed && <span>Switch to Dark Cyber</span>}
               </>
             )}
           </button>
         )}
 
         {/* System Status Tracker */}
-        <div style={{ margin: "24px 0", display: "flex", flexDirection: "column", gap: "8px" }}>
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            gap: "8px", 
-            fontSize: "0.75rem", 
-            color: isSandbox ? "var(--neon-amber)" : "var(--neon-emerald)",
-            background: "rgba(255,255,255,0.02)",
-            padding: "8px 12px",
-            borderRadius: "8px",
-            border: "1px solid rgba(255,255,255,0.04)"
-          }}>
-            <Shield size={12} />
-            <span>Mode: {isSandbox ? "Sandbox (Offline)" : "Sheets API Live"}</span>
-          </div>
-          {mounted && loading && (
+        {!isSidebarCollapsed && (
+          <div style={{ margin: "24px 0", display: "flex", flexDirection: "column", gap: "8px" }}>
             <div style={{ 
               display: "flex", 
               alignItems: "center", 
               gap: "8px", 
               fontSize: "0.75rem", 
-              color: "var(--neon-cyan)"
+              color: isSandbox ? "var(--neon-amber)" : "var(--neon-emerald)",
+              background: "rgba(255,255,255,0.02)",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.04)"
             }}>
-              <Activity size={12} style={{ animation: "spin 2s linear infinite" }} />
-              <span>Syncing ledger...</span>
+              <Shield size={12} />
+              <span>Mode: {isSandbox ? "Sandbox (Offline)" : "Sheets API Live"}</span>
             </div>
-          )}
-        </div>
+            {mounted && loading && (
+              <div style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px", 
+                fontSize: "0.75rem", 
+                color: "var(--neon-cyan)"
+              }}>
+                <Activity size={12} style={{ animation: "spin 2s linear infinite" }} />
+                <span>Syncing ledger...</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* User profile footer */}
-        <div className="sidebar-footer">
+        <div className="sidebar-footer" style={{ paddingLeft: isSidebarCollapsed ? "0" : "8px", display: "flex", justifyContent: isSidebarCollapsed ? "center" : "flex-start" }}>
           {mounted && user && (
-            <div className="user-badge">
-              <div className="user-avatar">
+            <div className="user-badge" title={isSidebarCollapsed ? `${user.displayName} (${user.email || "hustler@kylr.io"})` : ""}>
+              <div className="user-avatar" style={{ margin: isSidebarCollapsed ? "0 auto" : "0" }}>
                 {user.displayName.charAt(0)}
               </div>
-              <div className="user-info">
-                <span className="user-name">{user.displayName}</span>
-                <span className="user-tag">{user.email || "hustler@kylr.io"}</span>
-              </div>
+              {!isSidebarCollapsed && (
+                <div className="user-info">
+                  <span className="user-name">{user.displayName}</span>
+                  <span className="user-tag">{user.email || "hustler@kylr.io"}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
