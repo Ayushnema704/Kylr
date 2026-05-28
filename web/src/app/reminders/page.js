@@ -116,9 +116,12 @@ export default function RemindersPage() {
         setAmount("");
         setDeductionDay("1");
         setIsAutopay(false);
+      } else {
+        alert("Failed to add schedule: " + (res.error || "Unknown backend error"));
       }
     } catch (err) {
       console.error("Failed to add reminder:", err);
+      alert("Error adding reminder: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -128,9 +131,13 @@ export default function RemindersPage() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await checkOffReminder(remId, monthStr);
+      const res = await checkOffReminder(remId, monthStr);
+      if (res && !res.success) {
+        alert("Failed to log deduction: " + (res.error || "Unknown backend error"));
+      }
     } catch (err) {
       console.error("Failed to check off reminder:", err);
+      alert("Error logging deduction: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -139,9 +146,13 @@ export default function RemindersPage() {
   const handleDelete = async (remId) => {
     if (confirm("Are you sure you want to delete this recurring schedule? This will not affect transactions already posted.")) {
       try {
-        await deleteReminder(remId);
+        const res = await deleteReminder(remId);
+        if (res && !res.success) {
+          alert("Failed to delete recurring rule: " + (res.error || "Unknown backend error"));
+        }
       } catch (err) {
         console.error("Failed to delete reminder:", err);
+        alert("Error deleting recurring rule: " + err.message);
       }
     }
   };
