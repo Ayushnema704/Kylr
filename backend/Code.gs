@@ -96,6 +96,16 @@ function handleRequest(e, method) {
       case "getAiInsights":
         return responseJSON(getAiInsights(uid, query.geminiApiKey || GEMINI_API_KEY));
         
+      // REMINDERS & AUTOPAYS
+      case "getReminders":
+        return responseJSON(getReminders(uid));
+      case "addReminder":
+        return responseJSON(addReminder(uid, query));
+      case "deleteReminder":
+        return responseJSON(deleteReminder(uid, query.reminderId));
+      case "checkOffReminder":
+        return responseJSON(checkOffReminder(uid, query.reminderId, query.monthStr));
+        
       default:
         return responseJSON({ success: false, error: "Action '" + action + "' not recognized" });
     }
@@ -123,7 +133,8 @@ function initSpreadsheet() {
     "Users": ["UID", "Name", "Email", "Salary", "BudgetRuleEnabled", "NeedsPercentage", "WantsPercentage", "SavingsPercentage", "CreatedAt"],
     "Transactions": ["TransactionID", "UID", "Date", "Amount", "TransactionType", "Category", "Account", "Note", "BudgetType", "CreatedAt"],
     "Categories": ["CategoryID", "UID", "CategoryName", "Icon", "Color", "BudgetType", "CreatedAt"],
-    "Accounts": ["AccountID", "UID", "AccountType", "AccountName", "CurrentBalance", "CreditLimit", "BankName", "CardLast4Digits", "CreatedAt", "Color", "BuyPrice", "Quantity"]
+    "Accounts": ["AccountID", "UID", "AccountType", "AccountName", "CurrentBalance", "CreditLimit", "BankName", "CardLast4Digits", "CreatedAt", "Color", "BuyPrice", "Quantity"],
+    "Reminders": ["ReminderID", "UID", "Title", "Amount", "TransactionType", "Frequency", "Account", "DestinationAccount", "Category", "BudgetType", "StartDate", "DeductionDay", "IsAutopay", "CheckedOffMonths", "CreatedAt"]
   };
   
   for (let sheetName in sheets) {
@@ -840,3 +851,180 @@ Provide exactly 3 high-impact Bullet Insights covering:
     return { success: false, error: "AI Inference Failed: " + e.toString() };
   }
 }
+
+// ==========================================
+// 7. AUTOPAYS & REMINDERS MODULE
+// ==========================================
+
+function getReminders(uid) {
+  const list = getSheetRows("Reminders", uid);
+  // Sort descending by CreatedAt
+  list.sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
+  return { success: true, reminders: list };
+}
+
+function addReminder(uid, data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Reminders");
+  
+  const id = "REM_" + Math.random().toString(36).substr(2, 9).toUpperCase();
+  const title = data.title || "Recurring Deduction";
+  const amount = parseFloat(data.amount) || 0;
+  const type = data.transactionType || "Expense";
+  const freq = data.frequency || "Monthly";
+  const account = data.account || "Cash";
+  const destAccount = data.destinationAccount || "";
+  const category = data.category || "Uncategorized";
+  const budgetType = data.budgetType || "Want";
+  const startDate = data.startDate || new Date().toISOString().split('T')[0];
+  const deductionDay = parseInt(data.deductionDay) || 1;
+  const isAutopay = data.isAutopay === true || data.isAutopay === "true";
+  
+  sheet.appendRow([
+    id,
+    uid,
+    title,
+    amount,
+    type,
+    freq,
+    account,
+    destAccount,
+    category,
+    budgetType,
+    startDate,
+    deductionDay,
+    isAutopay,
+    "", // CheckedOffMonths
+    new Date().toISOString()
+  ]);
+  
+  SpreadsheetApp.flush();
+  return { success: true, reminderId: id, message: "Autopay/Reminder added successfully" };
+}
+
+function deleteReminder(uid, reminderId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Reminders");
+  const list = getSheetRows("Reminders", uid);
+  
+  const target = list.find(r => String(r.ReminderID) === String(reminderId));
+  if (!target) {
+    return { success: false, error: "Reminder not found or unauthorized" };
+  }
+  
+  sheet.deleteRow(target.rowIndex);
+  SpreadsheetApp.flush();
+  return { success: true, message: "Reminder deleted successfully" };
+}
+
+function checkOffReminder(uid, reminderId, monthStr) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Reminders");
+  const list = getSheetRows("Reminders", uid);
+  
+  const target = list.find(r => String(r.ReminderID) === String(reminderId));
+  if (!target) {
+    return { success: false, error: "Reminder not found or unauthorized" };
+  }
+  
+  // 1. Update checked off months list
+  let checked = target.CheckedOffMonths ? String(target.CheckedOffMonths).trim() : "";
+  const checkedArray = checked ? checked.split(",") : [];
+  if (checkedArray.indexOf(monthStr) !== -1) {
+    return { success: false, error: "Already checked off for " + monthStr };
+  }
+  checkedArray.push(monthStr);
+  const updatedChecked = checkedArray.join(",");
+  
+  // Set CheckedOffMonths in row (column N is 14th column)
+  sheet.getRange(target.rowIndex, 14).setValue(updatedChecked);
+  
+  // 2. Post corresponding transaction record
+  const noteSuffix = ` (Autopay ${monthStr})`;
+  const finalNote = target.Title ? `${target.Title}${noteSuffix}` : `Autopay deduction${noteSuffix}`;
+  
+  // Resolve transaction date (deduction day for the given month, e.g. "2026-05-10")
+  let dayStr = String(target.DeductionDay || 1);
+  if (dayStr.length === 1) dayStr = "0" + dayStr;
+  const txnDate = `${monthStr}-${dayStr}`;
+  
+  if (target.TransactionType === "Transfer") {
+    const amount = parseFloat(target.Amount) || 0;
+    const sourceAccount = target.Account;
+    const destAccount = target.DestinationAccount;
+    
+    // Create Transfer Out record
+    const outId = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
+    let outSheetName = "Transactions";
+    try {
+      outSheetName = "Transactions_" + monthStr;
+    } catch (err) {}
+    const outSheet = getOrCreateMonthlySheet(ss, outSheetName);
+    outSheet.appendRow([
+      outId,
+      uid,
+      txnDate,
+      amount,
+      "Transfer Out",
+      "Transfer",
+      sourceAccount,
+      finalNote ? `${finalNote} (Transfer to ${destAccount})` : `Transfer to ${destAccount}`,
+      "Savings",
+      new Date().toISOString()
+    ]);
+    adjustAccountBalance(uid, sourceAccount, amount, "Transfer Out");
+    
+    // Create Transfer In record
+    const inId = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
+    let inSheetName = "Transactions";
+    try {
+      inSheetName = "Transactions_" + monthStr;
+    } catch (err) {}
+    const inSheet = getOrCreateMonthlySheet(ss, inSheetName);
+    inSheet.appendRow([
+      inId,
+      uid,
+      txnDate,
+      amount,
+      "Transfer In",
+      "Transfer",
+      destAccount,
+      finalNote ? `${finalNote} (Transfer from ${sourceAccount})` : `Transfer from ${sourceAccount}`,
+      "Savings",
+      new Date().toISOString()
+    ]);
+    adjustAccountBalance(uid, destAccount, amount, "Transfer In");
+  } else {
+    // Standard Expense
+    const amount = parseFloat(target.Amount) || 0;
+    const type = target.TransactionType || "Expense";
+    const category = target.Category || "Uncategorized";
+    const account = target.Account || "Cash";
+    const budgetType = target.BudgetType || "Want";
+    const id = "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase();
+    
+    let sheetName = "Transactions";
+    try {
+      sheetName = "Transactions_" + monthStr;
+    } catch (err) {}
+    const txSheet = getOrCreateMonthlySheet(ss, sheetName);
+    txSheet.appendRow([
+      id,
+      uid,
+      txnDate,
+      amount,
+      type,
+      category,
+      account,
+      finalNote,
+      budgetType,
+      new Date().toISOString()
+    ]);
+    
+    adjustAccountBalance(uid, account, amount, type);
+  }
+  
+  SpreadsheetApp.flush();
+  return { success: true, message: "Deduction successfully checked off and posted to transactions" };
+}
+

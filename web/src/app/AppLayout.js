@@ -14,7 +14,8 @@ import {
   Sun,
   Moon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Bell
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
@@ -67,6 +68,7 @@ export default function AppLayout({ children }) {
     { name: "Analytics", path: "/analytics", icon: TrendingUp },
     { name: "Accounts", path: "/accounts", icon: CreditCard },
     { name: "Categories", path: "/categories", icon: Grid },
+    { name: "Reminders", path: "/reminders", icon: Bell },
     { name: "Settings", path: "/settings", icon: Settings },
   ];
 

@@ -19,6 +19,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import AccountsScreen from './screens/AccountsScreen';
 import AnalyticsScreen from './screens/AnalyticsScreen';
 import CategoriesScreen from './screens/CategoriesScreen';
+import RemindersScreen from './screens/RemindersScreen';
 import SettingsScreen from './screens/SettingsScreen';
 
 // Core Themes Mapping
@@ -92,6 +93,8 @@ function AppContent() {
         return <AnalyticsScreen theme={theme} />;
       case 'categories':
         return <CategoriesScreen theme={theme} />;
+      case 'reminders':
+        return <RemindersScreen theme={theme} />;
       case 'settings':
         return (
           <SettingsScreen 
@@ -131,6 +134,7 @@ function AppContent() {
           { id: 'analytics', label: 'Analytics', icon: 'trending-up' },
           { id: 'accounts', label: 'Accounts', icon: 'credit-card' },
           { id: 'categories', label: 'Categories', icon: 'grid' },
+          { id: 'reminders', label: 'Reminders', icon: 'bell' },
           { id: 'settings', label: 'Settings', icon: 'settings' }
         ].map(tab => {
           const isActive = activeTab === tab.id;

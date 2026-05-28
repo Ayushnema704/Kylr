@@ -21,6 +21,7 @@ export function DataProvider({ children }) {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [reminders, setReminders] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [aiInsights, setAiInsights] = useState("");
   const [loading, setLoading] = useState(true);
@@ -257,6 +258,15 @@ export function DataProvider({ children }) {
         localStorage.setItem("kylr_accounts", JSON.stringify(loadedAccs));
       }
 
+      const localReminders = localStorage.getItem("kylr_reminders");
+      let loadedReminders = [];
+      if (localReminders) {
+        loadedReminders = JSON.parse(localReminders);
+      } else {
+        localStorage.setItem("kylr_reminders", JSON.stringify([]));
+      }
+      setReminders(loadedReminders);
+
       const processedTxns = attachRunningBalances(loadedTxns, loadedAccs);
       setTransactions(processedTxns);
       setCategories(loadedCats);
@@ -327,6 +337,12 @@ export function DataProvider({ children }) {
           const withBalances = attachRunningBalances(processed, accs);
           setTransactions(withBalances);
         }
+        
+        // Fetch reminders
+        const resRem = await fetch(getUrl("getReminders"));
+        const jsonRem = await resRem.json();
+        if (jsonRem.success) setReminders(jsonRem.reminders);
+
         if (jsonAnly.success) setAnalytics(jsonAnly);
 
         // 5. Fetch AI Insights
@@ -922,6 +938,158 @@ export function DataProvider({ children }) {
   };
 
   // ==========================================
+  // AUTOPAYS & REMINDERS CRUD METHODS
+  // ==========================================
+  const addReminder = async (data) => {
+    if (isSandbox) {
+      const newRem = {
+        ReminderID: "REM_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+        UID: user.uid,
+        Title: data.title || "Recurring Deduction",
+        Amount: parseFloat(data.amount) || 0,
+        TransactionType: data.transactionType || "Expense",
+        Frequency: data.frequency || "Monthly",
+        Account: data.account || "Cash",
+        DestinationAccount: data.destinationAccount || "",
+        Category: data.category || "Uncategorized",
+        BudgetType: data.budgetType || "Want",
+        StartDate: data.startDate || new Date().toISOString().split('T')[0],
+        DeductionDay: parseInt(data.deductionDay) || 1,
+        IsAutopay: data.isAutopay === true || data.isAutopay === "true",
+        CheckedOffMonths: "",
+        CreatedAt: new Date().toISOString()
+      };
+      const updated = [newRem, ...reminders];
+      setReminders(updated);
+      localStorage.setItem("kylr_reminders", JSON.stringify(updated));
+      return { success: true };
+    } else {
+      try {
+        const payload = {
+          action: "addReminder",
+          uid: user.uid,
+          title: data.title,
+          amount: parseFloat(data.amount) || 0,
+          transactionType: data.transactionType,
+          frequency: data.frequency,
+          account: data.account,
+          destinationAccount: data.destinationAccount,
+          category: data.category,
+          budgetType: data.budgetType,
+          startDate: data.startDate,
+          deductionDay: parseInt(data.deductionDay) || 1,
+          isAutopay: data.isAutopay
+        };
+        const res = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+        const resJson = await res.json();
+        if (resJson.success) {
+          await refreshData();
+        }
+        return resJson;
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }
+  };
+
+  const deleteReminder = async (remId) => {
+    if (isSandbox) {
+      const updated = reminders.filter(r => r.ReminderID !== remId);
+      setReminders(updated);
+      localStorage.setItem("kylr_reminders", JSON.stringify(updated));
+      return { success: true };
+    } else {
+      try {
+        const payload = {
+          action: "deleteReminder",
+          uid: user.uid,
+          reminderId: remId
+        };
+        const res = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+        const resJson = await res.json();
+        if (resJson.success) {
+          await refreshData();
+        }
+        return resJson;
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }
+  };
+
+  const checkOffReminder = async (remId, monthStr) => {
+    if (isSandbox) {
+      const target = reminders.find(r => r.ReminderID === remId);
+      if (!target) return { success: false, error: "Reminder not found" };
+
+      let checked = target.CheckedOffMonths ? String(target.CheckedOffMonths).trim() : "";
+      const checkedArray = checked ? checked.split(",") : [];
+      if (checkedArray.indexOf(monthStr) !== -1) {
+        return { success: false, error: "Already checked off" };
+      }
+      checkedArray.push(monthStr);
+      
+      const updatedReminders = reminders.map(r => {
+        if (r.ReminderID === remId) {
+          return { ...r, CheckedOffMonths: checkedArray.join(",") };
+        }
+        return r;
+      });
+      setReminders(updatedReminders);
+      localStorage.setItem("kylr_reminders", JSON.stringify(updatedReminders));
+
+      // Post standard or self transfer transaction
+      const noteSuffix = ` (Autopay ${monthStr})`;
+      const finalNote = target.Title ? `${target.Title}${noteSuffix}` : `Autopay deduction${noteSuffix}`;
+      let dayStr = String(target.DeductionDay || 1);
+      if (dayStr.length === 1) dayStr = "0" + dayStr;
+      const txnDate = `${monthStr}-${dayStr}`;
+
+      const res = await addTransaction({
+        amount: target.Amount,
+        note: finalNote,
+        category: target.Category,
+        account: target.Account,
+        destinationAccount: target.DestinationAccount,
+        transactionType: target.TransactionType,
+        budgetType: target.BudgetType,
+        date: txnDate
+      });
+
+      return res;
+    } else {
+      try {
+        const payload = {
+          action: "checkOffReminder",
+          uid: user.uid,
+          reminderId: remId,
+          monthStr: monthStr
+        };
+        const res = await fetch(appsScriptUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify(payload)
+        });
+        const resJson = await res.json();
+        if (resJson.success) {
+          await refreshData();
+        }
+        return resJson;
+      } catch (err) {
+        return { success: false, error: err.toString() };
+      }
+    }
+  };
+
+  // ==========================================
   // PROFILE / BUDGET SETTINGS MOD CORE METHOD
   // ==========================================
   const updateBudget = async (data) => {
@@ -1066,7 +1234,11 @@ export function DataProvider({ children }) {
         addAccount,
         deleteAccount,
         updateBudget,
-        generateGeminiInsightsMock
+        generateGeminiInsightsMock,
+        reminders,
+        addReminder,
+        deleteReminder,
+        checkOffReminder
       }}
     >
       {children}
